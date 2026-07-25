@@ -1,0 +1,117 @@
+{
+  "version": "0.1",
+  "generatedAt": "2026-07-25T12:00:00.000Z",
+  "coverage": {
+    "address": "0x1234567890abcdef1234567890abcdef12345678",
+    "chainId": 1,
+    "source": "static-demo-fixture",
+    "isDemoData": true,
+    "analysisStartedAt": "2026-04-01T00:00:00.000Z",
+    "analysisEndedAt": "2026-06-30T23:59:59.000Z",
+    "fetchedTransactions": 3,
+    "includedTransactions": 2,
+    "needsReviewTransactions": 1
+  },
+  "transactions": [
+    {
+      "id": "demo-acquisition",
+      "txHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "chainId": 1,
+      "blockNumber": 22598104,
+      "timestamp": "2026-04-15T10:15:00.000Z",
+      "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "to": "0x1234567890abcdef1234567890abcdef12345678",
+      "explorerUrl": "https://etherscan.io/tx/0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "confirmed",
+      "assetDeltas": [
+        { "assetId": "ethereum", "symbol": "ETH", "decimals": 18, "amountAtomic": "250000000000000000", "direction": "in", "standard": "native" }
+      ],
+      "gasFeeWei": "21000000000000"
+    },
+    {
+      "id": "demo-swap",
+      "txHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "chainId": 1,
+      "blockNumber": 22660489,
+      "timestamp": "2026-05-22T14:30:00.000Z",
+      "from": "0x1234567890abcdef1234567890abcdef12345678",
+      "to": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "explorerUrl": "https://etherscan.io/tx/0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "status": "confirmed",
+      "assetDeltas": [
+        { "assetId": "ethereum", "symbol": "ETH", "decimals": 18, "amountAtomic": "100000000000000000", "direction": "out", "standard": "native" },
+        { "assetId": "usd-coin", "symbol": "USDC", "decimals": 6, "amountAtomic": "228000000", "direction": "in", "standard": "erc20" }
+      ],
+      "gasFeeWei": "47800000000000"
+    },
+    {
+      "id": "demo-unknown-transfer",
+      "txHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "chainId": 1,
+      "blockNumber": 22711244,
+      "timestamp": "2026-06-20T09:05:00.000Z",
+      "from": "0x1234567890abcdef1234567890abcdef12345678",
+      "to": "0xcccccccccccccccccccccccccccccccccccccccc",
+      "explorerUrl": "https://etherscan.io/tx/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "status": "confirmed",
+      "assetDeltas": [
+        { "assetId": "mystery-token", "symbol": "MYST", "decimals": 18, "amountAtomic": "5000000000000000000", "direction": "out", "standard": "erc20" }
+      ],
+      "gasFeeWei": "39000000000000"
+    }
+  ],
+  "classifications": [
+    {
+      "transactionId": "demo-acquisition",
+      "category": "buy",
+      "confidence": 0.95,
+      "reason": "Static fixture: supported ETH acquisition.",
+      "evidenceTxHashes": ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+      "needsReview": false,
+      "source": "rule"
+    },
+    {
+      "transactionId": "demo-swap",
+      "category": "swap",
+      "confidence": 0.95,
+      "reason": "Static fixture: supported ETH-to-USDC exchange.",
+      "evidenceTxHashes": ["0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+      "needsReview": false,
+      "source": "rule"
+    },
+    {
+      "transactionId": "demo-unknown-transfer",
+      "category": "unknown",
+      "confidence": 0.3,
+      "reason": "Static fixture: unknown token transfer must be reviewed.",
+      "evidenceTxHashes": ["0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"],
+      "needsReview": true,
+      "source": "rule"
+    }
+  ],
+  "taxLots": [
+    {
+      "lotId": "demo-eth-lot-1",
+      "assetId": "ethereum",
+      "symbol": "ETH",
+      "quantityAtomic": "150000000000000000",
+      "decimals": 18,
+      "acquiredAt": "2026-04-15T10:15:00.000Z",
+      "costBasisInrPaisa": "5000000",
+      "sourceTxHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "needsReview": false
+    }
+  ],
+  "taxSummary": {
+    "pricedTaxableGainsInrPaisa": "700000",
+    "vdaLossesInrPaisa": "0",
+    "estimatedBaseTaxInrPaisa": "210000",
+    "excludedTransactions": 1,
+    "calculationStatus": "demo_only"
+  },
+  "limitations": [
+    "This static fixture is demonstration data, not a live wallet result.",
+    "Live provider retrieval, price valuation, and LLM analysis are intentionally not included on Day 1.",
+    "This preview is not tax advice or an ITR filing service."
+  ]
+}
