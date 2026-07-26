@@ -1,0 +1,501 @@
+{
+  "cases": [
+    {
+      "name": "handles 18-decimal ETH and optional cess",
+      "includeCess": true,
+      "events": [
+        {
+          "id": "eth-buy",
+          "day": 1,
+          "deltas": [
+            { "asset": "ETH", "direction": "in", "amountAtomic": "1000000000000000000" }
+          ],
+          "fiatFlow": { "direction": "paid", "amountInrPaisa": "100000" },
+          "gasFeeWei": "21000",
+          "gasValueInrPaisa": "500"
+        },
+        {
+          "id": "eth-sell-half",
+          "day": 2,
+          "deltas": [
+            { "asset": "ETH", "direction": "out", "amountAtomic": "500000000000000000" }
+          ],
+          "fiatFlow": { "direction": "received", "amountInrPaisa": "70000" },
+          "gasFeeWei": "22000",
+          "gasValueInrPaisa": "600"
+        }
+      ],
+      "expected": {
+        "categories": ["buy", "sell"],
+        "positiveTaxableGainsInrPaisa": "20000",
+        "vdaLossesInrPaisa": "0",
+        "estimatedBaseTax30PercentInrPaisa": "6000",
+        "estimatedCess4PercentInrPaisa": "240",
+        "estimatedTaxIncludingCessInrPaisa": "6240",
+        "excludedTransactions": 0,
+        "remainingLot": {
+          "symbol": "ETH",
+          "quantityAtomic": "500000000000000000",
+          "costBasisInrPaisa": "50000"
+        },
+        "disposal": {
+          "costBasisInrPaisa": "50000",
+          "taxableGainInrPaisa": "20000",
+          "vdaLossInrPaisa": "0",
+          "needsReview": false
+        }
+      }
+    },
+    {
+      "name": "matches multiple acquisition lots by FIFO",
+      "includeCess": false,
+      "events": [
+        {
+          "id": "fifo-buy-one",
+          "day": 1,
+          "deltas": [
+            { "asset": "ETH", "direction": "in", "amountAtomic": "1000000000000000000" }
+          ],
+          "fiatFlow": { "direction": "paid", "amountInrPaisa": "100000" }
+        },
+        {
+          "id": "fifo-buy-two",
+          "day": 2,
+          "deltas": [
+            { "asset": "ETH", "direction": "in", "amountAtomic": "1000000000000000000" }
+          ],
+          "fiatFlow": { "direction": "paid", "amountInrPaisa": "200000" }
+        },
+        {
+          "id": "fifo-sell",
+          "day": 3,
+          "deltas": [
+            { "asset": "ETH", "direction": "out", "amountAtomic": "1500000000000000000" }
+          ],
+          "fiatFlow": { "direction": "received", "amountInrPaisa": "450000" }
+        }
+      ],
+      "expected": {
+        "categories": ["buy", "buy", "sell"],
+        "positiveTaxableGainsInrPaisa": "250000",
+        "vdaLossesInrPaisa": "0",
+        "estimatedBaseTax30PercentInrPaisa": "75000",
+        "estimatedCess4PercentInrPaisa": null,
+        "estimatedTaxIncludingCessInrPaisa": "75000",
+        "excludedTransactions": 0,
+        "remainingLot": {
+          "symbol": "ETH",
+          "quantityAtomic": "500000000000000000",
+          "costBasisInrPaisa": "100000"
+        },
+        "disposal": {
+          "costBasisInrPaisa": "200000",
+          "taxableGainInrPaisa": "250000",
+          "vdaLossInrPaisa": "0",
+          "needsReview": false,
+          "matchedLotCount": 2
+        }
+      }
+    },
+    {
+      "name": "excludes a disposal with missing FIFO cost basis",
+      "includeCess": false,
+      "events": [
+        {
+          "id": "basis-missing-transfer",
+          "day": 1,
+          "deltas": [
+            { "asset": "ETH", "direction": "in", "amountAtomic": "1000000000000000000" }
+          ]
+        },
+        {
+          "id": "basis-missing-sell",
+          "day": 2,
+          "deltas": [
+            { "asset": "ETH", "direction": "out", "amountAtomic": "500000000000000000" }
+          ],
+          "fiatFlow": { "direction": "received", "amountInrPaisa": "100000" }
+        }
+      ],
+      "expected": {
+        "categories": ["transfer_in", "sell"],
+        "positiveTaxableGainsInrPaisa": "0",
+        "vdaLossesInrPaisa": "0",
+        "estimatedBaseTax30PercentInrPaisa": "0",
+        "estimatedCess4PercentInrPaisa": null,
+        "estimatedTaxIncludingCessInrPaisa": "0",
+        "excludedTransactions": 2,
+        "disposal": {
+          "costBasisInrPaisa": null,
+          "taxableGainInrPaisa": null,
+          "vdaLossInrPaisa": null,
+          "needsReview": true
+        }
+      }
+    },
+    {
+      "name": "marks a swap with missing disposal valuation for review",
+      "includeCess": false,
+      "events": [
+        {
+          "id": "weth-buy",
+          "day": 1,
+          "deltas": [
+            { "asset": "WETH", "direction": "in", "amountAtomic": "1000000000000000000" }
+          ],
+          "fiatFlow": { "direction": "paid", "amountInrPaisa": "200000" }
+        },
+        {
+          "id": "weth-usdc-swap",
+          "day": 2,
+          "deltas": [
+            { "asset": "WETH", "direction": "out", "amountAtomic": "500000000000000000" },
+            { "asset": "USDC", "direction": "in", "amountAtomic": "1000000000" }
+          ],
+          "assetValuations": [
+            { "asset": "USDC", "direction": "in", "amountInrPaisa": "100000" }
+          ]
+        }
+      ],
+      "expected": {
+        "categories": ["buy", "swap"],
+        "categoryNeedsReview": [false, true],
+        "positiveTaxableGainsInrPaisa": "0",
+        "vdaLossesInrPaisa": "0",
+        "estimatedBaseTax30PercentInrPaisa": "0",
+        "estimatedCess4PercentInrPaisa": null,
+        "estimatedTaxIncludingCessInrPaisa": "0",
+        "excludedTransactions": 1,
+        "remainingLot": {
+          "symbol": "USDC",
+          "quantityAtomic": "1000000000",
+          "costBasisInrPaisa": "100000"
+        },
+        "disposal": {
+          "costBasisInrPaisa": null,
+          "taxableGainInrPaisa": null,
+          "vdaLossInrPaisa": null,
+          "needsReview": true
+        }
+      }
+    },
+    {
+      "name": "calculates a fully valued swap and creates the incoming lot",
+      "includeCess": false,
+      "events": [
+        {
+          "id": "swap-source-buy",
+          "day": 1,
+          "deltas": [
+            { "asset": "ETH", "direction": "in", "amountAtomic": "1000000000000000000" }
+          ],
+          "fiatFlow": { "direction": "paid", "amountInrPaisa": "100000" }
+        },
+        {
+          "id": "eth-usdc-valued-swap",
+          "day": 2,
+          "deltas": [
+            { "asset": "ETH", "direction": "out", "amountAtomic": "500000000000000000" },
+            { "asset": "USDC", "direction": "in", "amountAtomic": "500000000" }
+          ],
+          "assetValuations": [
+            { "asset": "ETH", "direction": "out", "amountInrPaisa": "70000" },
+            { "asset": "USDC", "direction": "in", "amountInrPaisa": "70000" }
+          ]
+        }
+      ],
+      "expected": {
+        "categories": ["buy", "swap"],
+        "categoryNeedsReview": [false, false],
+        "positiveTaxableGainsInrPaisa": "20000",
+        "vdaLossesInrPaisa": "0",
+        "estimatedBaseTax30PercentInrPaisa": "6000",
+        "estimatedCess4PercentInrPaisa": null,
+        "estimatedTaxIncludingCessInrPaisa": "6000",
+        "excludedTransactions": 0,
+        "remainingLot": {
+          "symbol": "USDC",
+          "quantityAtomic": "500000000",
+          "costBasisInrPaisa": "70000"
+        },
+        "disposal": {
+          "costBasisInrPaisa": "50000",
+          "taxableGainInrPaisa": "20000",
+          "vdaLossInrPaisa": "0",
+          "needsReview": false
+        }
+      }
+    },
+    {
+      "name": "excludes a disposal when the other swap side lacks valuation",
+      "includeCess": false,
+      "events": [
+        {
+          "id": "partial-swap-source-buy",
+          "day": 1,
+          "deltas": [
+            { "asset": "ETH", "direction": "in", "amountAtomic": "1000000000000000000" }
+          ],
+          "fiatFlow": { "direction": "paid", "amountInrPaisa": "100000" }
+        },
+        {
+          "id": "partial-eth-usdc-swap",
+          "day": 2,
+          "deltas": [
+            { "asset": "ETH", "direction": "out", "amountAtomic": "500000000000000000" },
+            { "asset": "USDC", "direction": "in", "amountAtomic": "500000000" }
+          ],
+          "assetValuations": [
+            { "asset": "ETH", "direction": "out", "amountInrPaisa": "70000" }
+          ]
+        }
+      ],
+      "expected": {
+        "categories": ["buy", "swap"],
+        "categoryNeedsReview": [false, true],
+        "positiveTaxableGainsInrPaisa": "0",
+        "vdaLossesInrPaisa": "0",
+        "estimatedBaseTax30PercentInrPaisa": "0",
+        "estimatedCess4PercentInrPaisa": null,
+        "estimatedTaxIncludingCessInrPaisa": "0",
+        "excludedTransactions": 1,
+        "remainingLot": {
+          "symbol": "USDC",
+          "quantityAtomic": "500000000",
+          "costBasisInrPaisa": null
+        },
+        "disposal": {
+          "costBasisInrPaisa": "50000",
+          "taxableGainInrPaisa": null,
+          "vdaLossInrPaisa": null,
+          "needsReview": true
+        }
+      }
+    },
+    {
+      "name": "keeps positive gains and VDA losses separate",
+      "includeCess": false,
+      "events": [
+        {
+          "id": "loss-buy",
+          "day": 1,
+          "deltas": [
+            { "asset": "ETH", "direction": "in", "amountAtomic": "1000000000000000000" }
+          ],
+          "fiatFlow": { "direction": "paid", "amountInrPaisa": "200000" }
+        },
+        {
+          "id": "gain-sale",
+          "day": 2,
+          "deltas": [
+            { "asset": "ETH", "direction": "out", "amountAtomic": "500000000000000000" }
+          ],
+          "fiatFlow": { "direction": "received", "amountInrPaisa": "150000" }
+        },
+        {
+          "id": "loss-sale",
+          "day": 3,
+          "deltas": [
+            { "asset": "ETH", "direction": "out", "amountAtomic": "500000000000000000" }
+          ],
+          "fiatFlow": { "direction": "received", "amountInrPaisa": "50000" }
+        }
+      ],
+      "expected": {
+        "categories": ["buy", "sell", "sell"],
+        "positiveTaxableGainsInrPaisa": "50000",
+        "vdaLossesInrPaisa": "50000",
+        "estimatedBaseTax30PercentInrPaisa": "15000",
+        "estimatedCess4PercentInrPaisa": null,
+        "estimatedTaxIncludingCessInrPaisa": "15000",
+        "excludedTransactions": 0
+      }
+    },
+    {
+      "name": "reports gas separately without changing USDT basis",
+      "includeCess": false,
+      "events": [
+        {
+          "id": "usdt-buy-with-gas",
+          "day": 1,
+          "deltas": [
+            { "asset": "USDT", "direction": "in", "amountAtomic": "1000000" }
+          ],
+          "fiatFlow": { "direction": "paid", "amountInrPaisa": "10000" },
+          "gasFeeWei": "30000000000000",
+          "gasValueInrPaisa": "500"
+        }
+      ],
+      "expected": {
+        "categories": ["buy"],
+        "positiveTaxableGainsInrPaisa": "0",
+        "vdaLossesInrPaisa": "0",
+        "estimatedBaseTax30PercentInrPaisa": "0",
+        "estimatedCess4PercentInrPaisa": null,
+        "estimatedTaxIncludingCessInrPaisa": "0",
+        "excludedTransactions": 0,
+        "remainingLot": {
+          "symbol": "USDT",
+          "quantityAtomic": "1000000",
+          "costBasisInrPaisa": "10000"
+        },
+        "gas": {
+          "valueInrPaisa": "500",
+          "includedInCostBasis": false,
+          "deductedFromProceeds": false,
+          "needsReview": false
+        }
+      }
+    },
+    {
+      "name": "keeps paise arithmetic exact above Number safe integer range",
+      "includeCess": false,
+      "events": [
+        {
+          "id": "large-weth-buy",
+          "day": 1,
+          "deltas": [
+            { "asset": "WETH", "direction": "in", "amountAtomic": "1000000000000000000" }
+          ],
+          "fiatFlow": {
+            "direction": "paid",
+            "amountInrPaisa": "900719925474099300"
+          }
+        },
+        {
+          "id": "large-weth-sell",
+          "day": 2,
+          "deltas": [
+            { "asset": "WETH", "direction": "out", "amountAtomic": "1000000000000000000" }
+          ],
+          "fiatFlow": {
+            "direction": "received",
+            "amountInrPaisa": "900719925474099400"
+          }
+        }
+      ],
+      "expected": {
+        "categories": ["buy", "sell"],
+        "positiveTaxableGainsInrPaisa": "100",
+        "vdaLossesInrPaisa": "0",
+        "estimatedBaseTax30PercentInrPaisa": "30",
+        "estimatedCess4PercentInrPaisa": null,
+        "estimatedTaxIncludingCessInrPaisa": "30",
+        "excludedTransactions": 0,
+        "disposal": {
+          "costBasisInrPaisa": "900719925474099300",
+          "taxableGainInrPaisa": "100",
+          "vdaLossInrPaisa": "0",
+          "needsReview": false
+        }
+      }
+    },
+    {
+      "name": "supports explicit approval gas and transfer rules",
+      "includeCess": false,
+      "events": [
+        {
+          "id": "approval-only",
+          "day": 1,
+          "deltas": [],
+          "operationHint": "approval",
+          "gasFeeWei": "1"
+        },
+        {
+          "id": "gas-only",
+          "day": 2,
+          "deltas": [],
+          "operationHint": "gas",
+          "gasFeeWei": "2"
+        },
+        {
+          "id": "usdc-transfer-in",
+          "day": 3,
+          "deltas": [
+            { "asset": "USDC", "direction": "in", "amountAtomic": "1000000" }
+          ]
+        },
+        {
+          "id": "usdc-transfer-out",
+          "day": 4,
+          "deltas": [
+            { "asset": "USDC", "direction": "out", "amountAtomic": "500000" }
+          ]
+        },
+        {
+          "id": "ambiguous-empty",
+          "day": 5,
+          "deltas": []
+        }
+      ],
+      "expected": {
+        "categories": ["approval", "gas", "transfer_in", "transfer_out", "unknown"],
+        "positiveTaxableGainsInrPaisa": "0",
+        "vdaLossesInrPaisa": "0",
+        "estimatedBaseTax30PercentInrPaisa": "0",
+        "estimatedCess4PercentInrPaisa": null,
+        "estimatedTaxIncludingCessInrPaisa": "0",
+        "excludedTransactions": 3
+      }
+    },
+    {
+      "name": "rejects unknown assets instead of guessing",
+      "includeCess": false,
+      "events": [
+        {
+          "id": "mystery-in",
+          "day": 1,
+          "deltas": [
+            {
+              "asset": "UNKNOWN",
+              "assetId": "eip155:1/erc20:0x1111111111111111111111111111111111111111",
+              "symbol": "MYST",
+              "decimals": 18,
+              "standard": "erc20",
+              "direction": "in",
+              "amountAtomic": "1000000000000000000"
+            }
+          ],
+          "fiatFlow": { "direction": "paid", "amountInrPaisa": "10000" }
+        }
+      ],
+      "expected": {
+        "categories": ["unknown"],
+        "positiveTaxableGainsInrPaisa": "0",
+        "vdaLossesInrPaisa": "0",
+        "estimatedBaseTax30PercentInrPaisa": "0",
+        "estimatedCess4PercentInrPaisa": null,
+        "estimatedTaxIncludingCessInrPaisa": "0",
+        "excludedTransactions": 1
+      }
+    },
+    {
+      "name": "rejects a supported asset with incorrect decimals",
+      "includeCess": false,
+      "events": [
+        {
+          "id": "bad-usdc-decimals",
+          "day": 1,
+          "deltas": [
+            {
+              "asset": "USDC",
+              "decimals": 18,
+              "direction": "in",
+              "amountAtomic": "1000000000000000000"
+            }
+          ],
+          "fiatFlow": { "direction": "paid", "amountInrPaisa": "10000" }
+        }
+      ],
+      "expected": {
+        "categories": ["unknown"],
+        "positiveTaxableGainsInrPaisa": "0",
+        "vdaLossesInrPaisa": "0",
+        "estimatedBaseTax30PercentInrPaisa": "0",
+        "estimatedCess4PercentInrPaisa": null,
+        "estimatedTaxIncludingCessInrPaisa": "0",
+        "excludedTransactions": 1
+      }
+    }
+  ]
+}
