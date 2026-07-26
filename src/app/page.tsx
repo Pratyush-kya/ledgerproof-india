@@ -14,7 +14,7 @@ export default function Home() {
             </h1>
           </div>
           <p className="max-w-xs text-sm leading-6 text-slate-300">
-            Day 1 prototype · Ethereum address validation and static demo ledger only.
+            Day 2 ingestion · Ethereum-only · up to 50 validated transactions.
           </p>
         </header>
 

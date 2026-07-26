@@ -1,0 +1,84 @@
+{
+  "data": {
+    "address": "0x1234567890abcdef1234567890abcdef12345678",
+    "chain_id": 1,
+    "chain_name": "eth-mainnet",
+    "current_page": 0,
+    "links": {
+      "prev": null,
+      "next": null
+    },
+    "items": [
+      {
+        "block_signed_at": "2026-07-20T10:30:00Z",
+        "block_height": 22999901,
+        "tx_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "successful": true,
+        "from_address": "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+        "to_address": "0x1234567890abcdef1234567890abcdef12345678",
+        "value": "125000000000000000",
+        "fees_paid": "21000000000000",
+        "explorers": [
+          {
+            "label": "Etherscan",
+            "url": "https://etherscan.io/tx/0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "log_events": []
+      },
+      {
+        "block_signed_at": "2026-07-21T11:45:00Z",
+        "block_height": 23001002,
+        "tx_hash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "successful": true,
+        "from_address": "0x1234567890abcdef1234567890abcdef12345678",
+        "to_address": "0x9999999999999999999999999999999999999999",
+        "value": "0",
+        "fees_paid": "31500000000000",
+        "explorers": [
+          {
+            "label": "Etherscan",
+            "url": "https://etherscan.io/tx/0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ],
+        "log_events": [
+          {
+            "sender_contract_decimals": 6,
+            "sender_contract_ticker_symbol": "USDC",
+            "sender_address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "decoded": {
+              "name": "Transfer",
+              "signature": "Transfer(indexed address,indexed address,uint256)",
+              "params": [
+                {
+                  "name": "from",
+                  "type": "address",
+                  "indexed": true,
+                  "decoded": true,
+                  "value": "0x1234567890abcdef1234567890abcdef12345678"
+                },
+                {
+                  "name": "to",
+                  "type": "address",
+                  "indexed": true,
+                  "decoded": true,
+                  "value": "0x7777777777777777777777777777777777777777"
+                },
+                {
+                  "name": "value",
+                  "type": "uint256",
+                  "indexed": false,
+                  "decoded": true,
+                  "value": "25000000"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "error": false,
+  "error_message": null,
+  "error_code": null
+}

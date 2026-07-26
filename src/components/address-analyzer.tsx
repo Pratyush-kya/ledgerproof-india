@@ -3,7 +3,12 @@
 import { useState } from "react";
 
 import { DEMO_LEDGER } from "@/lib/demo-ledger";
-import { EvmAddressSchema } from "@/lib/schemas";
+import {
+  EvmAddressSchema,
+  FetchApiErrorSchema,
+  FetchTransactionsSuccessSchema,
+  type FetchTransactionsResult,
+} from "@/lib/schemas";
 
 const demoAddress = DEMO_LEDGER.coverage.address;
 
@@ -11,25 +16,67 @@ export function AddressAnalyzer() {
   const [address, setAddress] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [showDemoLedger, setShowDemoLedger] = useState(false);
+  const [liveResult, setLiveResult] = useState<FetchTransactionsResult | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const validation = EvmAddressSchema.safeParse(address.trim());
 
     if (!validation.success) {
       setMessage(validation.error.issues[0]?.message ?? "Enter a valid Ethereum address.");
       setShowDemoLedger(false);
+      setLiveResult(null);
       return;
     }
 
-    setMessage("Address format confirmed. Live wallet retrieval begins on Day 2; no data has been fetched yet.");
+    setIsLoading(true);
+    setMessage("Fetching and validating Ethereum history…");
     setShowDemoLedger(false);
+    setLiveResult(null);
+
+    try {
+      const response = await fetch("/api/analysis/fetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: validation.data }),
+      });
+      const payload: unknown = await response.json();
+
+      if (!response.ok) {
+        const parsedError = FetchApiErrorSchema.safeParse(payload);
+        setMessage(
+          parsedError.success
+            ? parsedError.data.error.message
+            : "The server returned an unreadable error.",
+        );
+        return;
+      }
+
+      const parsedResult = FetchTransactionsSuccessSchema.safeParse(payload);
+      if (!parsedResult.success) {
+        setMessage("The server returned data that could not be safely validated.");
+        return;
+      }
+
+      setLiveResult(parsedResult.data.data);
+      setMessage(
+        parsedResult.data.data.isEmpty
+          ? "No Ethereum transactions were found for this address."
+          : `Loaded ${parsedResult.data.data.transactions.length} validated Ethereum transactions.`,
+      );
+    } catch {
+      setMessage("Could not reach the analysis service. Please retry.");
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   function loadDemo() {
     setAddress(demoAddress);
     setMessage("Static demo ledger loaded. This is not live blockchain data.");
     setShowDemoLedger(true);
+    setLiveResult(null);
   }
 
   return (
@@ -39,7 +86,7 @@ export function AddressAnalyzer() {
         Start with a public wallet address
       </h2>
       <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
-        Day 1 validates an address and loads a labelled fixture. It does not connect a wallet, call a blockchain provider, or make a tax calculation.
+        Fetch up to 50 recent Ethereum transactions through the server, or load the clearly labelled offline demo. No wallet connection or private key is needed.
       </p>
 
       <form className="mt-7" onSubmit={handleSubmit} noValidate>
@@ -63,9 +110,10 @@ export function AddressAnalyzer() {
         <div className="mt-5 flex flex-col gap-3 sm:flex-row">
           <button
             type="submit"
+            disabled={isLoading}
             className="min-h-12 rounded-xl bg-cyan-300 px-5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 focus-visible:ring-2 focus-visible:ring-cyan-100 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
           >
-            Check address
+            {isLoading ? "Fetching…" : "Analyze live wallet"}
           </button>
           <button
             type="button"
@@ -86,6 +134,56 @@ export function AddressAnalyzer() {
       </div>
 
       {showDemoLedger ? <DemoLedgerPreview /> : null}
+      {liveResult && !liveResult.isEmpty ? <LiveLedgerPreview result={liveResult} /> : null}
+    </section>
+  );
+}
+
+function LiveLedgerPreview({ result }: { result: FetchTransactionsResult }) {
+  return (
+    <section
+      className="mt-6 rounded-2xl border border-emerald-200/20 bg-emerald-100/5 p-5"
+      aria-label="Validated provider transactions"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-emerald-100">
+            Validated Ethereum history
+          </p>
+          <p className="mt-1 text-xs text-emerald-100/75">
+            {result.transactions.length} transaction
+            {result.transactions.length === 1 ? "" : "s"}
+            {result.truncated ? " · capped at 50" : ""}
+          </p>
+        </div>
+        <span className="rounded-full border border-emerald-200/30 px-3 py-1 text-xs font-medium text-emerald-100">
+          LIVE PROVIDER DATA
+        </span>
+      </div>
+      <ul className="mt-4 divide-y divide-emerald-100/10">
+        {result.transactions.map((transaction) => (
+          <li className="py-3 text-sm" key={transaction.id}>
+            <a
+              className="font-mono text-emerald-100 underline decoration-emerald-300/40 underline-offset-4"
+              href={transaction.explorerUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              {transaction.txHash.slice(0, 10)}…{transaction.txHash.slice(-6)}
+            </a>
+            <p className="mt-1 text-xs text-slate-400">
+              {transaction.assetDeltas.length
+                ? transaction.assetDeltas
+                    .map(
+                      (asset) =>
+                        `${asset.direction} ${asset.amountAtomic} ${asset.symbol} atomic units (${asset.decimals} decimals)`,
+                    )
+                    .join(" · ")
+                : "No wallet-relative native or ERC-20 movement decoded"}
+            </p>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

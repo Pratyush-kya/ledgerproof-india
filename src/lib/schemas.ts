@@ -22,7 +22,7 @@ const AtomicAmountSchema = z
 export const AssetDeltaSchema = z.object({
   assetId: z.string().min(1),
   symbol: z.string().min(1).max(24),
-  decimals: z.number().int().min(0).max(36),
+  decimals: z.number().int().min(0).max(255),
   amountAtomic: AtomicAmountSchema,
   direction: z.enum(["in", "out"]),
   standard: z.enum(["native", "erc20"]),
@@ -35,11 +35,46 @@ export const NormalizedTransactionSchema = z.object({
   blockNumber: z.number().int().nonnegative(),
   timestamp: z.string().datetime({ offset: true }),
   from: EvmAddressSchema,
-  to: EvmAddressSchema,
+  to: EvmAddressSchema.nullable(),
   explorerUrl: z.string().url(),
   status: z.enum(["confirmed", "failed"]),
   assetDeltas: z.array(AssetDeltaSchema),
   gasFeeWei: AtomicAmountSchema,
+});
+
+export const FetchTransactionsRequestSchema = z.object({
+  address: EvmAddressSchema,
+});
+
+export const FetchTransactionsResultSchema = z.object({
+  address: EvmAddressSchema,
+  chainId: z.literal(1),
+  source: z.literal("goldrush"),
+  fetchedAt: z.string().datetime({ offset: true }),
+  transactions: z.array(NormalizedTransactionSchema).max(50),
+  isEmpty: z.boolean(),
+  truncated: z.boolean(),
+});
+
+export const FetchTransactionsSuccessSchema = z.object({
+  data: FetchTransactionsResultSchema,
+});
+
+export const FetchApiErrorCodeSchema = z.enum([
+  "INVALID_ADDRESS",
+  "INVALID_REQUEST",
+  "MISSING_PROVIDER_KEY",
+  "UPSTREAM_RATE_LIMIT",
+  "UPSTREAM_INVALID_RESPONSE",
+  "UPSTREAM_UNAVAILABLE",
+]);
+
+export const FetchApiErrorSchema = z.object({
+  error: z.object({
+    code: FetchApiErrorCodeSchema,
+    message: z.string().min(1),
+    retryable: z.boolean(),
+  }),
 });
 
 export const ClassificationSchema = z.object({
@@ -57,7 +92,7 @@ export const TaxLotSchema = z.object({
   assetId: z.string().min(1),
   symbol: z.string().min(1).max(24),
   quantityAtomic: AtomicAmountSchema,
-  decimals: z.number().int().min(0).max(36),
+  decimals: z.number().int().min(0).max(255),
   acquiredAt: z.string().datetime({ offset: true }),
   costBasisInrPaisa: AtomicAmountSchema.nullable(),
   sourceTxHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
@@ -97,6 +132,7 @@ export const TaxReportSchema = z.object({
 
 export type EvmAddress = z.infer<typeof EvmAddressSchema>;
 export type NormalizedTransaction = z.infer<typeof NormalizedTransactionSchema>;
+export type FetchTransactionsResult = z.infer<typeof FetchTransactionsResultSchema>;
 export type Classification = z.infer<typeof ClassificationSchema>;
 export type TaxLot = z.infer<typeof TaxLotSchema>;
 export type ReportCoverage = z.infer<typeof ReportCoverageSchema>;
