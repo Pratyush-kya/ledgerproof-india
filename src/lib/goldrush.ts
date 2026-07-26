@@ -24,7 +24,9 @@ const GoldRushDecodedParamSchema = z.object({
   type: z.string().optional(),
   indexed: z.boolean().optional(),
   decoded: z.boolean().optional(),
-  value: z.string(),
+
+  // GoldRush may return strings, booleans, arrays or objects here.
+  value: z.unknown(),
 });
 
 const GoldRushLogEventSchema = z.object({
@@ -35,7 +37,12 @@ const GoldRushLogEventSchema = z.object({
     .object({
       name: z.string(),
       signature: z.string().optional(),
-      params: z.array(GoldRushDecodedParamSchema),
+
+      // GoldRush sometimes returns params: null.
+      params: z
+        .array(GoldRushDecodedParamSchema)
+        .nullish()
+        .transform((params) => params ?? []),
     })
     .nullable(),
 });
@@ -58,7 +65,12 @@ const GoldRushTransactionSchema = z.object({
     )
     .optional()
     .default([]),
-  log_events: z.array(GoldRushLogEventSchema).optional().default([]),
+
+  // Convert missing or null log_events to an empty array.
+  log_events: z
+    .array(GoldRushLogEventSchema)
+    .nullish()
+    .transform((events) => events ?? []),
 });
 
 const GoldRushPageSchema = z.object({
@@ -79,11 +91,6 @@ const GoldRushEnvelopeSchema = z.object({
   error_message: z.string().nullable().optional(),
   error_code: z.number().nullable().optional(),
 });
-
-const GoldRushProviderResponseSchema = z.union([
-  GoldRushEnvelopeSchema,
-  GoldRushPageSchema,
-]);
 
 type GoldRushPage = z.infer<typeof GoldRushPageSchema>;
 type GoldRushTransaction = z.infer<typeof GoldRushTransactionSchema>;
@@ -115,12 +122,15 @@ function buildInitialUrl(address: string) {
     `/v1/${CHAIN_NAME}/address/${encodeURIComponent(address)}/transactions_v3/`,
     GOLDRUSH_ORIGIN,
   );
+
   url.searchParams.set("quote-currency", "INR");
+
   return url;
 }
 
 function validateNextUrl(nextUrl: string, address: string) {
   const parsed = new URL(nextUrl);
+
   const expectedPathPrefix =
     `/v1/${CHAIN_NAME}/address/${encodeURIComponent(address)}/transactions_v3/`.toLowerCase();
 
@@ -129,34 +139,79 @@ function validateNextUrl(nextUrl: string, address: string) {
     parsed.origin !== GOLDRUSH_ORIGIN ||
     !parsed.pathname.toLowerCase().startsWith(expectedPathPrefix)
   ) {
-    throw new GoldRushInvalidResponseError("GoldRush returned an unsafe pagination link.");
+    throw new GoldRushInvalidResponseError(
+      "GoldRush returned an unsafe pagination link.",
+    );
   }
 
   return parsed;
 }
 
-function unwrapProviderPage(payload: unknown): GoldRushPage {
-  const parsed = GoldRushProviderResponseSchema.safeParse(payload);
+function logValidationIssues(error: z.ZodError) {
+  console.error(
+    "[goldrush] response validation failed",
+    error.issues.map((issue) => ({
+      path: issue.path.join("."),
+      code: issue.code,
+      message: issue.message,
+    })),
+  );
+}
 
-  if (!parsed.success) {
+function unwrapProviderPage(payload: unknown): GoldRushPage {
+  /*
+   * Determine whether GoldRush returned its normal envelope:
+   * { data, error, error_message, error_code }
+   */
+  const envelopeProbe = z
+    .object({
+      data: z.unknown(),
+    })
+    .passthrough()
+    .safeParse(payload);
+
+  if (envelopeProbe.success) {
+    const parsedEnvelope = GoldRushEnvelopeSchema.safeParse(payload);
+
+    if (!parsedEnvelope.success) {
+      logValidationIssues(parsedEnvelope.error);
+      throw new GoldRushInvalidResponseError();
+    }
+
+    if (parsedEnvelope.data.error || parsedEnvelope.data.data === null) {
+      throw new GoldRushInvalidResponseError(
+        parsedEnvelope.data.error_message ??
+          "GoldRush returned an error response.",
+      );
+    }
+
+    return parsedEnvelope.data.data;
+  }
+
+  // Support direct-page responses used by fixtures or provider variations.
+  const parsedPage = GoldRushPageSchema.safeParse(payload);
+
+  if (!parsedPage.success) {
+    logValidationIssues(parsedPage.error);
     throw new GoldRushInvalidResponseError();
   }
 
-  if ("data" in parsed.data) {
-    if (parsed.data.error || !parsed.data.data) {
-      throw new GoldRushUnavailableError();
-    }
-    return parsed.data.data;
-  }
-
-  return parsed.data;
+  return parsedPage.data;
 }
 
 function findDecodedParam(
   params: z.infer<typeof GoldRushDecodedParamSchema>[],
   name: string,
-) {
-  return params.find((param) => param.name.toLowerCase() === name)?.value;
+): string | undefined {
+  const value = params.find(
+    (param) => param.name.toLowerCase() === name.toLowerCase(),
+  )?.value;
+
+  /*
+   * Addresses and atomic token amounts must be strings.
+   * Boolean/object/array metadata is ignored safely.
+   */
+  return typeof value === "string" ? value : undefined;
 }
 
 function addNativeDeltas(
@@ -169,6 +224,7 @@ function addNativeDeltas(
   }
 
   const wallet = walletAddress.toLowerCase();
+
   const nativeAsset = {
     assetId: ETH_ASSET_ID,
     symbol: "ETH",
@@ -178,10 +234,17 @@ function addNativeDeltas(
   };
 
   if (transaction.from_address.toLowerCase() === wallet) {
-    deltas.push({ ...nativeAsset, direction: "out" });
+    deltas.push({
+      ...nativeAsset,
+      direction: "out",
+    });
   }
+
   if (transaction.to_address?.toLowerCase() === wallet) {
-    deltas.push({ ...nativeAsset, direction: "in" });
+    deltas.push({
+      ...nativeAsset,
+      direction: "in",
+    });
   }
 }
 
@@ -199,8 +262,15 @@ function addErc20Deltas(
 
     const from = findDecodedParam(event.decoded.params, "from");
     const to = findDecodedParam(event.decoded.params, "to");
-    const amountAtomic = findDecodedParam(event.decoded.params, "value");
+    const amountAtomic = findDecodedParam(
+      event.decoded.params,
+      "value",
+    );
 
+    /*
+     * Ignore malformed event metadata instead of rejecting the
+     * entire wallet transaction history.
+     */
     if (
       event.sender_contract_decimals === null ||
       !from ||
@@ -222,10 +292,17 @@ function addErc20Deltas(
     };
 
     if (from.toLowerCase() === wallet) {
-      deltas.push({ ...tokenAsset, direction: "out" });
+      deltas.push({
+        ...tokenAsset,
+        direction: "out",
+      });
     }
+
     if (to.toLowerCase() === wallet) {
-      deltas.push({ ...tokenAsset, direction: "in" });
+      deltas.push({
+        ...tokenAsset,
+        direction: "in",
+      });
     }
   }
 }
@@ -235,6 +312,7 @@ export function normalizeGoldRushTransaction(
   walletAddress: string,
 ) {
   const assetDeltas: NormalizedTransaction["assetDeltas"] = [];
+
   addNativeDeltas(transaction, walletAddress, assetDeltas);
   addErc20Deltas(transaction, walletAddress, assetDeltas);
 
@@ -266,18 +344,25 @@ export async function fetchGoldRushTransactions({
 }): Promise<FetchTransactionsResult> {
   const validAddress = EvmAddressSchema.parse(address);
   const trimmedApiKey = apiKey.trim();
+
   if (!trimmedApiKey) {
     throw new GoldRushUnavailableError();
   }
 
   const transactions: NormalizedTransaction[] = [];
   const seenHashes = new Set<string>();
+
   let nextUrl: URL | null = buildInitialUrl(validAddress);
   let pagesFetched = 0;
   let truncated = false;
 
-  while (nextUrl && transactions.length < PAGE_LIMIT && pagesFetched < MAX_PROVIDER_PAGES) {
+  while (
+    nextUrl &&
+    transactions.length < PAGE_LIMIT &&
+    pagesFetched < MAX_PROVIDER_PAGES
+  ) {
     let response: Response;
+
     try {
       response = await fetchImpl(nextUrl, {
         method: "GET",
@@ -294,11 +379,13 @@ export async function fetchGoldRushTransactions({
     if (response.status === 429) {
       throw new GoldRushRateLimitError();
     }
+
     if (!response.ok) {
       throw new GoldRushUnavailableError();
     }
 
     let payload: unknown;
+
     try {
       payload = await response.json();
     } catch {
@@ -306,23 +393,33 @@ export async function fetchGoldRushTransactions({
     }
 
     const page = unwrapProviderPage(payload);
+
     if (page.address.toLowerCase() !== validAddress.toLowerCase()) {
       throw new GoldRushInvalidResponseError(
         "GoldRush returned history for a different wallet address.",
       );
     }
+
     pagesFetched += 1;
 
     for (const providerTransaction of page.items) {
       if (seenHashes.has(providerTransaction.tx_hash)) {
         continue;
       }
+
       if (transactions.length === PAGE_LIMIT) {
         truncated = true;
         break;
       }
+
       seenHashes.add(providerTransaction.tx_hash);
-      transactions.push(normalizeGoldRushTransaction(providerTransaction, validAddress));
+
+      transactions.push(
+        normalizeGoldRushTransaction(
+          providerTransaction,
+          validAddress,
+        ),
+      );
     }
 
     if (transactions.length === PAGE_LIMIT) {
@@ -330,7 +427,9 @@ export async function fetchGoldRushTransactions({
       break;
     }
 
-    nextUrl = page.links.next ? validateNextUrl(page.links.next, validAddress) : null;
+    nextUrl = page.links.next
+      ? validateNextUrl(page.links.next, validAddress)
+      : null;
   }
 
   if (nextUrl) {
