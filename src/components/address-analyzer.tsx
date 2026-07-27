@@ -11,6 +11,7 @@ import {
 import { DEMO_LEDGER } from "@/lib/demo-ledger";
 import {
   AnalysisReportSuccessSchema,
+  AnalysisReportErrorSchema,
   EvmAddressSchema,
   FetchApiErrorSchema,
   FetchTransactionsSuccessSchema,
@@ -93,7 +94,8 @@ export function AddressAnalyzer() {
 
         if (parsedError.success) {
           const isRateLimit =
-            parsedError.data.error.code === "UPSTREAM_RATE_LIMIT";
+            parsedError.data.error.code === "UPSTREAM_RATE_LIMIT" ||
+            parsedError.data.error.code === "RATE_LIMITED";
           setFlow({
             status: "error",
             title: isRateLimit
@@ -154,11 +156,18 @@ export function AddressAnalyzer() {
         AnalysisReportSuccessSchema.safeParse(analysisPayload);
 
       if (!analysisResponse.ok || !parsedAnalysis.success) {
+        const parsedAnalysisError =
+          AnalysisReportErrorSchema.safeParse(analysisPayload);
         setFlow({
           status: "error",
-          title: "Reconciliation report unavailable",
-          message:
-            "Transactions loaded, but the validated report could not be produced. No partial figures are shown.",
+          title:
+            parsedAnalysisError.success &&
+            parsedAnalysisError.data.error.code === "RATE_LIMITED"
+              ? "Analysis rate limit reached"
+              : "Reconciliation report unavailable",
+          message: parsedAnalysisError.success
+            ? parsedAnalysisError.data.error.message
+            : "Transactions loaded, but the validated report could not be produced. No partial figures are shown.",
           retryable: true,
         });
         return;

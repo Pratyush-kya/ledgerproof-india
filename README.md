@@ -157,6 +157,12 @@ The MVP does not attempt:
 - automatic ownership detection across multiple wallets; or
 - individualized legal or tax conclusions.
 
+Historical market prices are applied only to a confirmed, two-sided supported
+asset swap. A one-sided wallet movement is not treated as proof of a purchase,
+sale, or cost basis. If a historical price, acquisition lot, or other required
+fact is unavailable, the UI says `Not calculated` instead of displaying a
+zero-value estimate.
+
 ## Tax-Preview Rules
 
 The application should keep tax rules in a source-dated configuration and
@@ -189,33 +195,33 @@ For the simplified preview:
 | Deployment | Vercel | Public hackathon deployment |
 | Optional Web3 | Solidity + viem + Base Sepolia | Report-hash receipt |
 
-## Suggested Project Structure
+## Implemented Project Structure
 
 ```text
-app/
+src/app/
   api/
     analysis/
       fetch/
-      classify/
-  analysis/
+      report/
   page.tsx
-components/
-lib/
-  blockchain/
-  classification/
-  pricing/
-  reconciliation/
-  reporting/
-  schemas/
-contracts/
+src/components/
+src/lib/
+  goldrush.ts
+  coingecko.ts
+  transaction-agent.ts
+  reconciliation.ts
+  tax-report.ts
+  request-guard.ts
 docs/
   codex-runs/
 tests/
   fixtures/
+.github/
+  workflows/
+    ci.yml
 ```
 
-The exact structure may evolve as the application is implemented. The README
-should be updated to match the real repository before submission.
+The optional smart-contract receipt is not part of the current core build.
 
 ## Local Development
 
@@ -261,6 +267,7 @@ Open `http://localhost:3000`.
 
 ```bash
 npm run lint
+npm run typecheck
 npm test
 npm run build
 npx playwright test
@@ -291,6 +298,8 @@ package scripts use different names.
 
 - Never request or store a wallet seed phrase or private key.
 - Keep all provider and model credentials server-side.
+- Apply per-instance request budgets to public API routes and short-lived
+  server caches to reduce duplicate provider requests.
 - Treat transaction metadata and token strings as untrusted input.
 - Validate LLM output before using it.
 - Do not let the LLM perform financial arithmetic.
@@ -350,15 +359,16 @@ The optional Web3 receipt must remain blocked until all core checks pass:
 
 ## Submission Deliverables
 
-- **Application:** `ADD_DEPLOYED_URL_HERE`
-- **Public repository:** `ADD_GITHUB_URL_HERE`
-- **Three-minute demo:** `ADD_DEMO_VIDEO_URL_HERE`
-- **Project Description:** `ADD_GOOGLE_DOC_URL_HERE`
-- **Optional contract:** `ADD_BASE_SEPOLIA_EXPLORER_URL_HERE`
+- **Application:** Not published yet
+- **Public repository:** [Pratyush-kya/ledgerproof-india](https://github.com/Pratyush-kya/ledgerproof-india)
+- **Three-minute demo:** Not recorded yet
+- **Project Description:** Not published yet
+- **Optional contract:** Not implemented; remains blocked behind the core
+  release gate
 
-Replace these placeholders only after verifying that each link is public and
+Update each pending deliverable only after verifying that it is public and
 matches the submitted release.
 
 ## License
 
-Add the chosen open-source license before final submission.
+MIT. See [`LICENSE`](./LICENSE).

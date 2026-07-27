@@ -31,6 +31,10 @@ export function buildPlainEnglishTaxReport(
               )}% confidence; ${classification.reason})`,
           )
           .join(" ");
+  const hasCalculatedDisposals =
+    reconciliation.summary.calculatedDisposals > 0;
+  const notCalculatedFinding =
+    "Not calculated: no disposal had both a complete FIFO cost basis and a supported INR valuation.";
 
   return {
     title: "Deterministic crypto tax reconciliation preview",
@@ -38,22 +42,27 @@ export function buildPlainEnglishTaxReport(
       reconciliation.summary.calculationStatus === "complete"
         ? "The deterministic engine had the evidence needed for every included transaction, but this remains a limited preview and must be checked before filing."
         : `This is a partial estimate. ${reconciliation.summary.excludedTransactions} transaction(s) were excluded from calculated figures because required evidence was missing or ambiguous.`,
-    deterministicFindings: [
-      `Positive taxable gains included by the deterministic engine: ${formatInrFromPaisa(
-        reconciliation.summary.positiveTaxableGainsInrPaisa,
-      )}.`,
-      `VDA losses shown separately and not netted against gains: ${formatInrFromPaisa(
-        reconciliation.summary.vdaLossesInrPaisa,
-      )}.`,
-      `Indicative 30% base-tax calculation on included positive gains: ${formatInrFromPaisa(
-        reconciliation.summary.estimatedBaseTax30PercentInrPaisa,
-      )}.`,
-      reconciliation.summary.includeCess
-        ? `Indicative total including the selected 4% cess: ${formatInrFromPaisa(
-            reconciliation.summary.estimatedTaxIncludingCessInrPaisa,
-          )}.`
-        : "The displayed estimate does not add cess, surcharge, or TDS credits.",
-    ],
+    deterministicFindings: hasCalculatedDisposals
+      ? [
+          `Positive taxable gains included by the deterministic engine: ${formatInrFromPaisa(
+            reconciliation.summary.positiveTaxableGainsInrPaisa,
+          )}.`,
+          `VDA losses shown separately and not netted against gains: ${formatInrFromPaisa(
+            reconciliation.summary.vdaLossesInrPaisa,
+          )}.`,
+          `Indicative 30% base-tax calculation on included positive gains: ${formatInrFromPaisa(
+            reconciliation.summary.estimatedBaseTax30PercentInrPaisa,
+          )}.`,
+          reconciliation.summary.includeCess
+            ? `Indicative total including the selected 4% cess: ${formatInrFromPaisa(
+                reconciliation.summary.estimatedTaxIncludingCessInrPaisa,
+              )}.`
+            : "The displayed estimate does not add cess, surcharge, or TDS credits.",
+        ]
+      : [
+          notCalculatedFinding,
+          "Cess, surcharge, and TDS credits are not calculated when the base estimate is unavailable.",
+        ],
     reviewWarnings: [
       classificationMode === "agent"
         ? `Agent evidence was used only for classification explanations: ${classificationEvidence}`

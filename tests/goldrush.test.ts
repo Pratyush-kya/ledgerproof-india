@@ -44,11 +44,22 @@ describe("GoldRush ingestion", () => {
       symbol: "USDC",
       direction: "out",
     });
+    expect(result.transactions[1]).toMatchObject({
+      decodedEventNames: ["Transfer"],
+      contractAddresses: [
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      ],
+    });
   });
 
   it("accepts a null current_page returned by GoldRush", async () => {
-    const nullPageFixture = structuredClone(providerFixture);
-    nullPageFixture.data.current_page = null;
+    const nullPageFixture = {
+      ...structuredClone(providerFixture),
+      data: {
+        ...structuredClone(providerFixture.data),
+        current_page: null,
+      },
+    };
 
     const result = await fetchGoldRushTransactions({
       address,
@@ -79,11 +90,18 @@ describe("GoldRush ingestion", () => {
   });
 
   it("follows a validated GoldRush next-page link", async () => {
-    const firstPage = structuredClone(providerFixture);
+    const firstPage = {
+      ...structuredClone(providerFixture),
+      data: {
+        ...structuredClone(providerFixture.data),
+        links: {
+          ...structuredClone(providerFixture.data.links),
+          next: `https://api.covalenthq.com/v1/eth-mainnet/address/${address}/transactions_v3/page/1/`,
+        },
+      },
+    };
     const secondPage = structuredClone(providerFixture);
     firstPage.data.items = [firstPage.data.items[0]];
-    firstPage.data.links.next =
-      `https://api.covalenthq.com/v1/eth-mainnet/address/${address}/transactions_v3/page/1/`;
     secondPage.data.items = [secondPage.data.items[1]];
     let calls = 0;
 
@@ -104,8 +122,16 @@ describe("GoldRush ingestion", () => {
   });
 
   it("rejects pagination links that could leak the authorization header", async () => {
-    const unsafeFixture = structuredClone(providerFixture);
-    unsafeFixture.data.links.next = `https://attacker.example/v1/eth-mainnet/address/${address}/transactions_v3/`;
+    const unsafeFixture = {
+      ...structuredClone(providerFixture),
+      data: {
+        ...structuredClone(providerFixture.data),
+        links: {
+          ...structuredClone(providerFixture.data.links),
+          next: `https://attacker.example/v1/eth-mainnet/address/${address}/transactions_v3/`,
+        },
+      },
+    };
 
     await expect(
       fetchGoldRushTransactions({

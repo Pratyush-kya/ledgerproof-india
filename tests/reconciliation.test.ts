@@ -110,12 +110,16 @@ function buildTransaction(
     status: event.status ?? "confirmed",
     assetDeltas: event.deltas.map((delta) => {
       const asset = resolveAsset(delta);
+      const registeredAsset = delta.asset === "UNKNOWN" ? null : asset;
 
       return {
-        assetId: delta.assetId ?? asset.assetId,
-        symbol: delta.symbol ?? asset.symbol,
-        decimals: delta.decimals ?? asset.decimals,
-        standard: delta.standard ?? asset.standard,
+        assetId:
+          delta.assetId ??
+          registeredAsset?.assetId ??
+          "eip155:1/erc20:0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        symbol: delta.symbol ?? registeredAsset?.symbol ?? "UNKNOWN",
+        decimals: delta.decimals ?? registeredAsset?.decimals ?? 18,
+        standard: delta.standard ?? registeredAsset?.standard ?? "erc20",
         direction: delta.direction,
         amountAtomic: delta.amountAtomic,
       };

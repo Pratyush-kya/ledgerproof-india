@@ -34,11 +34,18 @@ type CompactTransaction = {
   transactionId: string;
   txHash: string;
   status: NormalizedTransaction["status"];
+  from: string;
+  to: string | null;
+  methodName: string | null;
+  decodedEventNames: string[];
+  contractAddresses: string[];
   movements: Array<{
     direction: "in" | "out";
     standard: "native" | "erc20";
     symbol: string;
     assetId: string;
+    amountAtomic: string;
+    decimals: number;
   }>;
   hasGasFee: boolean;
 };
@@ -65,11 +72,24 @@ export function compactTransactions(
     transactionId: `tx_${index + 1}`,
     txHash: transaction.txHash,
     status: transaction.status,
+    from: bounded(transaction.from, 42),
+    to: transaction.to ? bounded(transaction.to, 42) : null,
+    methodName: transaction.methodName
+      ? bounded(transaction.methodName, 128)
+      : null,
+    decodedEventNames: (transaction.decodedEventNames ?? [])
+      .slice(0, 20)
+      .map((name) => bounded(name, 128)),
+    contractAddresses: (transaction.contractAddresses ?? [])
+      .slice(0, 20)
+      .map((address) => bounded(address, 42)),
     movements: transaction.assetDeltas.slice(0, 12).map((delta) => ({
       direction: delta.direction,
       standard: delta.standard,
       symbol: bounded(delta.symbol, 24),
       assetId: bounded(delta.assetId, 96),
+      amountAtomic: bounded(delta.amountAtomic, 96),
+      decimals: delta.decimals,
     })),
     hasGasFee: BigInt(transaction.gasFeeWei) > BigInt(0),
   }));

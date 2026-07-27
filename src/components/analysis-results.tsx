@@ -158,6 +158,11 @@ export function fixtureResultsViewModel(fixture: TaxReport): ResultsViewModel {
       estimatedCess4PercentInrPaisa: null,
       estimatedTaxIncludingCessInrPaisa:
         fixture.taxSummary.estimatedBaseTaxInrPaisa,
+      calculatedDisposals:
+        fixture.taxSummary.pricedTaxableGainsInrPaisa !== "0" ||
+        fixture.taxSummary.vdaLossesInrPaisa !== "0"
+          ? 1
+          : 0,
       excludedTransactions: fixture.taxSummary.excludedTransactions,
       calculationStatus: "partial",
       excludesSurcharge: true,
@@ -209,6 +214,7 @@ export function AnalysisResults({ result }: { result: ResultsViewModel }) {
   const excluded = result.classifications.filter(
     (item) => item.needsReview || item.category === "unknown",
   );
+  const hasCalculatedDisposals = result.summary.calculatedDisposals > 0;
 
   function correctCategory(
     classification: Classification,
@@ -343,23 +349,37 @@ export function AnalysisResults({ result }: { result: ResultsViewModel }) {
         <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <FinancialMetric
             label="Positive gains"
-            value={formatInr(result.summary.positiveTaxableGainsInrPaisa)}
+            value={
+              hasCalculatedDisposals
+                ? formatInr(result.summary.positiveTaxableGainsInrPaisa)
+                : "Not calculated"
+            }
             detail="Included, priced disposals only"
           />
           <FinancialMetric
             label="VDA losses"
-            value={formatInr(result.summary.vdaLossesInrPaisa)}
+            value={
+              hasCalculatedDisposals
+                ? formatInr(result.summary.vdaLossesInrPaisa)
+                : "Not calculated"
+            }
             detail="Shown separately; not netted"
           />
           <FinancialMetric
             label="30% base preview"
-            value={formatInr(result.summary.estimatedBaseTax30PercentInrPaisa)}
+            value={
+              hasCalculatedDisposals
+                ? formatInr(result.summary.estimatedBaseTax30PercentInrPaisa)
+                : "Not calculated"
+            }
             detail="Before surcharge and TDS credit"
           />
           <FinancialMetric
             label={result.summary.includeCess ? "Preview with 4% cess" : "Cess"}
             value={
-              result.summary.includeCess
+              !hasCalculatedDisposals
+                ? "Not calculated"
+                : result.summary.includeCess
                 ? formatInr(result.summary.estimatedTaxIncludingCessInrPaisa)
                 : "Not added"
             }

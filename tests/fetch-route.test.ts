@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import providerFixture from "../src/fixtures/goldrush-transactions.json";
 import { POST } from "../src/app/api/analysis/fetch/route";
+import { resetRequestGuardsForTests } from "../src/lib/request-guard";
 
 const address = "0x1234567890abcdef1234567890abcdef12345678";
 const originalApiKey = process.env.GOLDRUSH_API_KEY;
@@ -15,6 +16,7 @@ function request(body: unknown) {
 }
 
 afterEach(() => {
+  resetRequestGuardsForTests();
   vi.unstubAllGlobals();
   if (originalApiKey === undefined) {
     delete process.env.GOLDRUSH_API_KEY;

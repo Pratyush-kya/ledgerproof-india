@@ -80,7 +80,7 @@ test("shows a visible and actionable rate-limit state", async ({ page }) => {
   await page.getByLabel("Ethereum wallet address").fill(address);
   await page.getByRole("button", { name: "Analyze live wallet" }).click();
 
-  const alert = page.getByRole("alert");
+  const alert = page.locator("#flow-status");
   await expect(alert).toContainText("Provider rate limit reached");
   await expect(alert).toContainText(
     "Blockchain data is busy. Please retry shortly.",
@@ -98,7 +98,7 @@ test("rejects an invalid public address before making a request", async ({
   await page.getByLabel("Ethereum wallet address").fill("not-an-address");
   await page.getByRole("button", { name: "Analyze live wallet" }).click();
 
-  await expect(page.getByRole("alert")).toContainText(
+  await expect(page.locator("#flow-status")).toContainText(
     "Enter a valid 0x Ethereum wallet address.",
   );
 });

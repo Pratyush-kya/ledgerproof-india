@@ -40,6 +40,9 @@ export const NormalizedTransactionSchema = z.object({
   status: z.enum(["confirmed", "failed"]),
   assetDeltas: z.array(AssetDeltaSchema),
   gasFeeWei: AtomicAmountSchema,
+  methodName: z.string().min(1).max(128).nullable().optional(),
+  decodedEventNames: z.array(z.string().min(1).max(128)).max(20).optional(),
+  contractAddresses: z.array(EvmAddressSchema).max(20).optional(),
 });
 
 export const FetchTransactionsRequestSchema = z.object({
@@ -67,6 +70,7 @@ export const FetchApiErrorCodeSchema = z.enum([
   "UPSTREAM_RATE_LIMIT",
   "UPSTREAM_INVALID_RESPONSE",
   "UPSTREAM_UNAVAILABLE",
+  "RATE_LIMITED",
 ]);
 
 export const FetchApiErrorSchema = z.object({
@@ -123,6 +127,7 @@ export const DeterministicSummarySchema = z.strictObject({
   includeCess: z.boolean(),
   estimatedCess4PercentInrPaisa: AtomicAmountSchema.nullable(),
   estimatedTaxIncludingCessInrPaisa: AtomicAmountSchema,
+  calculatedDisposals: z.number().int().nonnegative(),
   excludedTransactions: z.number().int().nonnegative(),
   calculationStatus: z.enum(["complete", "partial"]),
   excludesSurcharge: z.literal(true),
@@ -207,7 +212,7 @@ export const AnalysisReportSuccessSchema = z.strictObject({
 
 export const AnalysisReportErrorSchema = z.strictObject({
   error: z.strictObject({
-    code: z.enum(["INVALID_REQUEST", "ANALYSIS_FAILED"]),
+    code: z.enum(["INVALID_REQUEST", "ANALYSIS_FAILED", "RATE_LIMITED"]),
     message: z.string().min(1),
   }),
 });

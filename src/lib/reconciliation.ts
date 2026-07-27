@@ -156,6 +156,7 @@ export type ReconciliationResult = {
     includeCess: boolean;
     estimatedCess4PercentInrPaisa: string | null;
     estimatedTaxIncludingCessInrPaisa: string;
+    calculatedDisposals: number;
     excludedTransactions: number;
     calculationStatus: "complete" | "partial";
     excludesSurcharge: true;
@@ -692,12 +693,14 @@ export function reconcileTransactions(
 
   let positiveGains = ZERO;
   let losses = ZERO;
+  let calculatedDisposals = 0;
 
   for (const disposal of disposals) {
     if (disposal.needsReview) {
       continue;
     }
 
+    calculatedDisposals += 1;
     positiveGains += BigInt(disposal.taxableGainInrPaisa ?? "0");
     losses += BigInt(disposal.vdaLossInrPaisa ?? "0");
   }
@@ -734,6 +737,7 @@ export function reconcileTransactions(
         ? cess.toString()
         : null,
       estimatedTaxIncludingCessInrPaisa: (baseTax + cess).toString(),
+      calculatedDisposals,
       excludedTransactions: excludedTransactionIds.size,
       calculationStatus:
         excludedTransactionIds.size === 0 ? "complete" : "partial",

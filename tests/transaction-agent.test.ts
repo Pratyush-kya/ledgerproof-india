@@ -176,9 +176,19 @@ describe("narrow transaction agent", () => {
     expect(String(requestBody?.input)).toContain("UNTRUSTED_BLOCKCHAIN_DATA");
     expect(String(requestBody?.input)).toContain(hostileSymbol);
     expect(String(requestBody?.input)).toContain(hostileAssetId.slice(0, 96));
-    expect(compactTransactions([hostileTransaction])[0]).not.toHaveProperty(
-      "amountAtomic",
-    );
+    expect(
+      compactTransactions([hostileTransaction])[0]?.movements[0],
+    ).toMatchObject({
+      amountAtomic: "1",
+      decimals: 18,
+    });
+    expect(compactTransactions([hostileTransaction])[0]).toMatchObject({
+      from: COUNTERPARTY,
+      to: WALLET,
+      methodName: null,
+      decodedEventNames: [],
+      contractAddresses: [],
+    });
     expect(requestBody).not.toHaveProperty("apiKey");
   });
 });

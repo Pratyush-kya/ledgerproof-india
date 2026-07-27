@@ -56,6 +56,7 @@ const GoldRushTransactionSchema = z.object({
   to_address: EvmAddressSchema.nullable(),
   value: AtomicAmountSchema,
   fees_paid: AtomicAmountSchema,
+  function_name: z.string().min(1).nullable().optional(),
   explorers: z
     .array(
       z.object({
@@ -321,6 +322,20 @@ export function normalizeGoldRushTransaction(
 
   addNativeDeltas(transaction, walletAddress, assetDeltas);
   addErc20Deltas(transaction, walletAddress, assetDeltas);
+  const decodedEventNames = [
+    ...new Set(
+      transaction.log_events
+        .map((event) => event.decoded?.name)
+        .filter((name): name is string => Boolean(name)),
+    ),
+  ].slice(0, 20);
+  const contractAddresses = [
+    ...new Set(
+      transaction.log_events.map((event) =>
+        event.sender_address.toLowerCase(),
+      ),
+    ),
+  ].slice(0, 20);
 
   return NormalizedTransactionSchema.parse({
     id: transaction.tx_hash,
@@ -336,6 +351,9 @@ export function normalizeGoldRushTransaction(
     status: transaction.successful ? "confirmed" : "failed",
     assetDeltas,
     gasFeeWei: transaction.fees_paid,
+    methodName: transaction.function_name ?? null,
+    decodedEventNames,
+    contractAddresses,
   });
 }
 

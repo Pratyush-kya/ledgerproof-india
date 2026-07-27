@@ -8,6 +8,12 @@ import {
   GoldRushUnavailableError,
 } from "@/lib/goldrush";
 import {
+  consumeRequestBudget,
+  getCachedResponse,
+  requestClientKey,
+  setCachedResponse,
+} from "@/lib/request-guard";
+import {
   FetchApiErrorSchema,
   FetchTransactionsRequestSchema,
   FetchTransactionsSuccessSchema,
@@ -34,6 +40,22 @@ function errorResponse(
 }
 
 export async function POST(request: Request) {
+  if (
+    !consumeRequestBudget({
+      namespace: "wallet-fetch",
+      clientKey: requestClientKey(request),
+      limit: 20,
+      windowMs: 60_000,
+    })
+  ) {
+    return errorResponse(
+      429,
+      "RATE_LIMITED",
+      "Too many wallet requests. Please retry in about a minute.",
+      true,
+    );
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -68,11 +90,24 @@ export async function POST(request: Request) {
   }
 
   try {
+    const cacheKey = `goldrush:${requestResult.data.address.toLowerCase()}`;
+    const cached = getCachedResponse<z.infer<typeof FetchTransactionsSuccessSchema>>(
+      cacheKey,
+    );
+    if (cached) {
+      return NextResponse.json(cached, {
+        status: 200,
+        headers: { "Cache-Control": "private, max-age=0" },
+      });
+    }
+
     const data = await fetchGoldRushTransactions({
       address: requestResult.data.address,
       apiKey,
     });
-    return NextResponse.json(FetchTransactionsSuccessSchema.parse({ data }), {
+    const payload = FetchTransactionsSuccessSchema.parse({ data });
+    setCachedResponse(cacheKey, payload, 60_000);
+    return NextResponse.json(payload, {
       status: 200,
       headers: { "Cache-Control": "no-store" },
     });
