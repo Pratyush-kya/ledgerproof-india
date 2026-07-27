@@ -46,6 +46,20 @@ describe("GoldRush ingestion", () => {
     });
   });
 
+  it("accepts a null current_page returned by GoldRush", async () => {
+    const nullPageFixture = structuredClone(providerFixture);
+    nullPageFixture.data.current_page = null;
+
+    const result = await fetchGoldRushTransactions({
+      address,
+      apiKey: "test-only-key",
+      fetchImpl: async () => jsonResponse(nullPageFixture),
+    });
+
+    expect(result.transactions).toHaveLength(2);
+    expect(result.transactions[0]?.txHash).toBe(`0x${"a".repeat(64)}`);
+  });
+
   it("caps an oversized provider page at 50 transactions", async () => {
     const baseItem = providerFixture.data.items[0];
     const oversizedFixture = structuredClone(providerFixture);

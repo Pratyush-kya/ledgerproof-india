@@ -77,7 +77,7 @@ export const FetchApiErrorSchema = z.object({
   }),
 });
 
-export const ClassificationSchema = z.object({
+export const ClassificationSchema = z.strictObject({
   transactionId: z.string().min(1),
   category: TransactionCategorySchema,
   confidence: z.number().min(0).max(1),
@@ -85,6 +85,84 @@ export const ClassificationSchema = z.object({
   evidenceTxHashes: z.array(z.string().regex(/^0x[a-fA-F0-9]{64}$/)).min(1),
   needsReview: z.boolean(),
   source: z.enum(["rule", "agent", "user"]),
+});
+
+export const AgentExplanationSchema = z
+  .string()
+  .min(1)
+  .max(500)
+  .regex(
+    /^(?!.*(?:₹|\bINR\b|\bUSD\b|%|\btax\b|\bgain\b|\bloss\b|\bprice\b|\btotal\b|\bcost basis\b|\bproceeds\b|\d+\s*[+\-*/=]\s*\d+)).*$/i,
+    "Agent explanations must not contain financial calculations or tax conclusions.",
+  );
+
+export const AgentClassificationOutputSchema = z.strictObject({
+  classifications: z
+    .array(
+      z.strictObject({
+        transactionId: z.string().regex(/^tx_\d+$/),
+        category: TransactionCategorySchema,
+        confidence: z.number().min(0).max(1),
+        reason: AgentExplanationSchema,
+        evidenceTxHashes: z
+          .array(z.string().regex(/^0x[a-fA-F0-9]{64}$/))
+          .min(1)
+          .max(10),
+        needsReview: z.boolean(),
+      }),
+    )
+    .max(50),
+});
+
+export const ClassificationModeSchema = z.enum(["agent", "rule_fallback"]);
+
+export const DeterministicSummarySchema = z.strictObject({
+  positiveTaxableGainsInrPaisa: AtomicAmountSchema,
+  vdaLossesInrPaisa: AtomicAmountSchema,
+  estimatedBaseTax30PercentInrPaisa: AtomicAmountSchema,
+  includeCess: z.boolean(),
+  estimatedCess4PercentInrPaisa: AtomicAmountSchema.nullable(),
+  estimatedTaxIncludingCessInrPaisa: AtomicAmountSchema,
+  excludedTransactions: z.number().int().nonnegative(),
+  calculationStatus: z.enum(["complete", "partial"]),
+  excludesSurcharge: z.literal(true),
+  excludesTdsCredit: z.literal(true),
+});
+
+export const PlainEnglishTaxReportSchema = z.strictObject({
+  title: z.string().min(1),
+  overview: z.string().min(1),
+  deterministicFindings: z.array(z.string().min(1)).min(1),
+  reviewWarnings: z.array(z.string().min(1)).min(1),
+  disclaimer: z.string().min(1),
+});
+
+export const AnalysisReportRequestSchema = z.strictObject({
+  transactions: z.array(NormalizedTransactionSchema).min(1).max(50),
+  evidence: z.array(z.unknown()).max(50).default([]),
+  includeCess: z.boolean().default(false),
+});
+
+export const AnalysisReportSuccessSchema = z.strictObject({
+  data: z.strictObject({
+    classificationMode: ClassificationModeSchema,
+    classificationNotice: z.string().min(1),
+    classifications: z.array(ClassificationSchema),
+    calculation: z.strictObject({
+      engineVersion: z.literal("0.1"),
+      method: z.literal("deterministic-rules-and-fifo"),
+      summary: DeterministicSummarySchema,
+      limitations: z.array(z.string().min(1)).min(1),
+    }),
+    report: PlainEnglishTaxReportSchema,
+  }),
+});
+
+export const AnalysisReportErrorSchema = z.strictObject({
+  error: z.strictObject({
+    code: z.enum(["INVALID_REQUEST", "ANALYSIS_FAILED"]),
+    message: z.string().min(1),
+  }),
 });
 
 export const TaxLotSchema = z.object({
@@ -134,6 +212,8 @@ export type EvmAddress = z.infer<typeof EvmAddressSchema>;
 export type NormalizedTransaction = z.infer<typeof NormalizedTransactionSchema>;
 export type FetchTransactionsResult = z.infer<typeof FetchTransactionsResultSchema>;
 export type Classification = z.infer<typeof ClassificationSchema>;
+export type ClassificationMode = z.infer<typeof ClassificationModeSchema>;
+export type AnalysisReportSuccess = z.infer<typeof AnalysisReportSuccessSchema>;
 export type TaxLot = z.infer<typeof TaxLotSchema>;
 export type ReportCoverage = z.infer<typeof ReportCoverageSchema>;
 export type TaxReport = z.infer<typeof TaxReportSchema>;

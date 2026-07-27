@@ -68,7 +68,19 @@ test("shows a live label only after a successful validated API response", async 
   await page.getByLabel("Ethereum wallet address").fill(address);
   await page.getByRole("button", { name: "Analyze live wallet" }).click();
 
-  await expect(page.getByText("Loaded 1 validated Ethereum transactions.")).toBeVisible();
+  await expect(
+    page.getByText("Loaded and reconciled 1 validated Ethereum transactions."),
+  ).toBeVisible();
   await expect(page.getByLabel("Validated provider transactions")).toBeVisible();
   await expect(page.getByText("LIVE PROVIDER DATA")).toBeVisible();
+  await expect(page.getByLabel("Plain-English tax report")).toBeVisible();
+  await expect(page.getByText("RULE FALLBACK", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("deterministic rules still own every financial calculation", {
+      exact: false,
+    }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("educational reconciliation estimate", { exact: false }),
+  ).toBeVisible();
 });

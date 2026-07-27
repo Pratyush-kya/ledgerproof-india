@@ -77,7 +77,13 @@ const GoldRushPageSchema = z.object({
   address: EvmAddressSchema,
   chain_id: z.literal(1),
   chain_name: z.literal(CHAIN_NAME),
-  current_page: z.number().int().nonnegative().optional(),
+  // GoldRush may return null for the first or only page.
+  current_page: z
+    .number()
+    .int()
+    .nonnegative()
+    .nullish()
+    .transform((page) => page ?? 0),
   links: z.object({
     prev: z.string().url().nullable().optional(),
     next: z.string().url().nullable().optional(),

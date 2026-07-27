@@ -4,9 +4,11 @@ import { useState } from "react";
 
 import { DEMO_LEDGER } from "@/lib/demo-ledger";
 import {
+  AnalysisReportSuccessSchema,
   EvmAddressSchema,
   FetchApiErrorSchema,
   FetchTransactionsSuccessSchema,
+  type AnalysisReportSuccess,
   type FetchTransactionsResult,
 } from "@/lib/schemas";
 
@@ -17,6 +19,9 @@ export function AddressAnalyzer() {
   const [message, setMessage] = useState<string | null>(null);
   const [showDemoLedger, setShowDemoLedger] = useState(false);
   const [liveResult, setLiveResult] = useState<FetchTransactionsResult | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<
+    AnalysisReportSuccess["data"] | null
+  >(null);
   const [isLoading, setIsLoading] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -27,6 +32,7 @@ export function AddressAnalyzer() {
       setMessage(validation.error.issues[0]?.message ?? "Enter a valid Ethereum address.");
       setShowDemoLedger(false);
       setLiveResult(null);
+      setAnalysisResult(null);
       return;
     }
 
@@ -34,6 +40,7 @@ export function AddressAnalyzer() {
     setMessage("Fetching and validating Ethereum history…");
     setShowDemoLedger(false);
     setLiveResult(null);
+    setAnalysisResult(null);
 
     try {
       const response = await fetch("/api/analysis/fetch", {
@@ -60,10 +67,31 @@ export function AddressAnalyzer() {
       }
 
       setLiveResult(parsedResult.data.data);
+      const transactions = parsedResult.data.data.transactions;
+
+      if (transactions.length > 0) {
+        const analysisResponse = await fetch("/api/analysis/report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transactions }),
+        });
+        const analysisPayload: unknown = await analysisResponse.json();
+        const parsedAnalysis =
+          AnalysisReportSuccessSchema.safeParse(analysisPayload);
+
+        if (!analysisResponse.ok || !parsedAnalysis.success) {
+          setMessage(
+            "Transactions loaded, but the reconciliation report could not be safely validated.",
+          );
+          return;
+        }
+
+        setAnalysisResult(parsedAnalysis.data.data);
+      }
       setMessage(
         parsedResult.data.data.isEmpty
           ? "No Ethereum transactions were found for this address."
-          : `Loaded ${parsedResult.data.data.transactions.length} validated Ethereum transactions.`,
+          : `Loaded and reconciled ${parsedResult.data.data.transactions.length} validated Ethereum transactions.`,
       );
     } catch {
       setMessage("Could not reach the analysis service. Please retry.");
@@ -77,6 +105,7 @@ export function AddressAnalyzer() {
     setMessage("Static demo ledger loaded. This is not live blockchain data.");
     setShowDemoLedger(true);
     setLiveResult(null);
+    setAnalysisResult(null);
   }
 
   return (
@@ -135,6 +164,7 @@ export function AddressAnalyzer() {
 
       {showDemoLedger ? <DemoLedgerPreview /> : null}
       {liveResult && !liveResult.isEmpty ? <LiveLedgerPreview result={liveResult} /> : null}
+      {analysisResult ? <AnalysisReportPreview result={analysisResult} /> : null}
     </section>
   );
 }
@@ -184,6 +214,87 @@ function LiveLedgerPreview({ result }: { result: FetchTransactionsResult }) {
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+function AnalysisReportPreview({
+  result,
+}: {
+  result: AnalysisReportSuccess["data"];
+}) {
+  const isFallback = result.classificationMode === "rule_fallback";
+
+  return (
+    <section
+      className="mt-6 rounded-2xl border border-amber-200/20 bg-amber-100/5 p-5"
+      aria-label="Plain-English tax report"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-amber-100">
+            {result.report.title}
+          </p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+            {result.report.overview}
+          </p>
+        </div>
+        <span
+          className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+            isFallback
+              ? "border-amber-200/40 text-amber-100"
+              : "border-violet-200/40 text-violet-100"
+          }`}
+        >
+          {isFallback ? "RULE FALLBACK" : "AGENT CLASSIFICATION"}
+        </span>
+      </div>
+
+      <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-xs leading-5 text-slate-300">
+        {result.classificationNotice}
+      </p>
+
+      <h3 className="mt-5 text-sm font-semibold text-white">
+        Deterministic calculation
+      </h3>
+      <ul className="mt-2 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-300">
+        {result.report.deterministicFindings.map((finding) => (
+          <li key={finding}>{finding}</li>
+        ))}
+      </ul>
+
+      <h3 className="mt-5 text-sm font-semibold text-white">
+        Classification evidence
+      </h3>
+      <ul className="mt-2 divide-y divide-white/10">
+        {result.classifications.map((classification) => (
+          <li className="py-3 text-sm" key={classification.transactionId}>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="capitalize text-slate-100">
+                {classification.category.replaceAll("_", " ")}
+              </span>
+              <span className="text-xs text-slate-400">
+                {Math.round(classification.confidence * 100)}% confidence
+              </span>
+              {classification.needsReview ? (
+                <span className="rounded-full bg-amber-300/10 px-2 py-0.5 text-xs text-amber-100">
+                  NEEDS REVIEW
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1 text-xs leading-5 text-slate-400">
+              {classification.reason}
+            </p>
+            <p className="mt-1 font-mono text-[11px] text-slate-500">
+              Evidence: {classification.evidenceTxHashes.join(", ")}
+            </p>
+          </li>
+        ))}
+      </ul>
+
+      <p className="mt-5 border-t border-white/10 pt-4 text-xs leading-5 text-amber-100/80">
+        {result.report.disclaimer}
+      </p>
     </section>
   );
 }
