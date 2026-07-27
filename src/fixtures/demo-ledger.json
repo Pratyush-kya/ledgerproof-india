@@ -24,7 +24,7 @@
       "explorerUrl": "https://etherscan.io/tx/0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "status": "confirmed",
       "assetDeltas": [
-        { "assetId": "ethereum", "symbol": "ETH", "decimals": 18, "amountAtomic": "250000000000000000", "direction": "in", "standard": "native" }
+        { "assetId": "eip155:1/slip44:60", "symbol": "ETH", "decimals": 18, "amountAtomic": "250000000000000000", "direction": "in", "standard": "native" }
       ],
       "gasFeeWei": "21000000000000"
     },
@@ -39,8 +39,8 @@
       "explorerUrl": "https://etherscan.io/tx/0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "status": "confirmed",
       "assetDeltas": [
-        { "assetId": "ethereum", "symbol": "ETH", "decimals": 18, "amountAtomic": "100000000000000000", "direction": "out", "standard": "native" },
-        { "assetId": "usd-coin", "symbol": "USDC", "decimals": 6, "amountAtomic": "228000000", "direction": "in", "standard": "erc20" }
+        { "assetId": "eip155:1/slip44:60", "symbol": "ETH", "decimals": 18, "amountAtomic": "100000000000000000", "direction": "out", "standard": "native" },
+        { "assetId": "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "symbol": "USDC", "decimals": 6, "amountAtomic": "228000000", "direction": "in", "standard": "erc20" }
       ],
       "gasFeeWei": "47800000000000"
     },
@@ -92,7 +92,7 @@
   "taxLots": [
     {
       "lotId": "demo-eth-lot-1",
-      "assetId": "ethereum",
+      "assetId": "eip155:1/slip44:60",
       "symbol": "ETH",
       "quantityAtomic": "150000000000000000",
       "decimals": 18,
@@ -111,7 +111,7 @@
   },
   "limitations": [
     "This static fixture is demonstration data, not a live wallet result.",
-    "Live provider retrieval, price valuation, and LLM analysis are intentionally not included on Day 1.",
+    "Fixture valuations and classifications are illustrative and do not come from a live provider or model run.",
     "This preview is not tax advice or an ITR filing service."
   ]
 }

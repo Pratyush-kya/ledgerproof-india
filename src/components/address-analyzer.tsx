@@ -2,48 +2,86 @@
 
 import { useState } from "react";
 
+import {
+  AnalysisResults,
+  fixtureResultsViewModel,
+  liveResultsViewModel,
+  type ResultsViewModel,
+} from "@/components/analysis-results";
 import { DEMO_LEDGER } from "@/lib/demo-ledger";
 import {
   AnalysisReportSuccessSchema,
   EvmAddressSchema,
   FetchApiErrorSchema,
   FetchTransactionsSuccessSchema,
-  type AnalysisReportSuccess,
-  type FetchTransactionsResult,
 } from "@/lib/schemas";
 
+type FlowState =
+  | { status: "idle" }
+  | { status: "fetching"; message: string }
+  | { status: "analyzing"; message: string }
+  | { status: "empty"; message: string }
+  | {
+      status: "error";
+      title: string;
+      message: string;
+      retryable: boolean;
+    }
+  | { status: "success"; message: string };
+
+const REQUEST_TIMEOUT_MS = 15_000;
 const demoAddress = DEMO_LEDGER.coverage.address;
+
+async function fetchWithTimeout(url: string, init: RequestInit) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(
+    () => controller.abort(),
+    REQUEST_TIMEOUT_MS,
+  );
+
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function isTimeoutError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
+}
 
 export function AddressAnalyzer() {
   const [address, setAddress] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-  const [showDemoLedger, setShowDemoLedger] = useState(false);
-  const [liveResult, setLiveResult] = useState<FetchTransactionsResult | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<
-    AnalysisReportSuccess["data"] | null
-  >(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [flow, setFlow] = useState<FlowState>({ status: "idle" });
+  const [result, setResult] = useState<ResultsViewModel | null>(null);
+
+  const isLoading = flow.status === "fetching" || flow.status === "analyzing";
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const validation = EvmAddressSchema.safeParse(address.trim());
 
     if (!validation.success) {
-      setMessage(validation.error.issues[0]?.message ?? "Enter a valid Ethereum address.");
-      setShowDemoLedger(false);
-      setLiveResult(null);
-      setAnalysisResult(null);
+      setResult(null);
+      setFlow({
+        status: "error",
+        title: "Check the wallet address",
+        message:
+          validation.error.issues[0]?.message ??
+          "Enter a valid Ethereum address.",
+        retryable: false,
+      });
       return;
     }
 
-    setIsLoading(true);
-    setMessage("Fetching and validating Ethereum history…");
-    setShowDemoLedger(false);
-    setLiveResult(null);
-    setAnalysisResult(null);
+    setResult(null);
+    setFlow({
+      status: "fetching",
+      message: "Fetching and validating recent Ethereum history…",
+    });
 
     try {
-      const response = await fetch("/api/analysis/fetch", {
+      const response = await fetchWithTimeout("/api/analysis/fetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address: validation.data }),
@@ -52,283 +90,231 @@ export function AddressAnalyzer() {
 
       if (!response.ok) {
         const parsedError = FetchApiErrorSchema.safeParse(payload);
-        setMessage(
-          parsedError.success
-            ? parsedError.data.error.message
-            : "The server returned an unreadable error.",
-        );
+
+        if (parsedError.success) {
+          const isRateLimit =
+            parsedError.data.error.code === "UPSTREAM_RATE_LIMIT";
+          setFlow({
+            status: "error",
+            title: isRateLimit
+              ? "Provider rate limit reached"
+              : parsedError.data.error.code === "MISSING_PROVIDER_KEY"
+                ? "Live data is not configured"
+                : "Live wallet fetch failed",
+            message: parsedError.data.error.message,
+            retryable: parsedError.data.error.retryable,
+          });
+        } else {
+          setFlow({
+            status: "error",
+            title: "Unreadable provider response",
+            message:
+              "The server returned an error that did not match the safety schema.",
+            retryable: true,
+          });
+        }
         return;
       }
 
       const parsedResult = FetchTransactionsSuccessSchema.safeParse(payload);
       if (!parsedResult.success) {
-        setMessage("The server returned data that could not be safely validated.");
+        setFlow({
+          status: "error",
+          title: "Provider data failed validation",
+          message:
+            "Nothing was analyzed because the blockchain response could not be safely validated.",
+          retryable: true,
+        });
         return;
       }
 
-      setLiveResult(parsedResult.data.data);
-      const transactions = parsedResult.data.data.transactions;
-
-      if (transactions.length > 0) {
-        const analysisResponse = await fetch("/api/analysis/report", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ transactions }),
+      if (parsedResult.data.data.isEmpty) {
+        setFlow({
+          status: "empty",
+          message:
+            "No recent Ethereum transactions were returned for this address. Try another public address or inspect the static demo.",
         });
-        const analysisPayload: unknown = await analysisResponse.json();
-        const parsedAnalysis =
-          AnalysisReportSuccessSchema.safeParse(analysisPayload);
-
-        if (!analysisResponse.ok || !parsedAnalysis.success) {
-          setMessage(
-            "Transactions loaded, but the reconciliation report could not be safely validated.",
-          );
-          return;
-        }
-
-        setAnalysisResult(parsedAnalysis.data.data);
+        return;
       }
-      setMessage(
-        parsedResult.data.data.isEmpty
-          ? "No Ethereum transactions were found for this address."
-          : `Loaded and reconciled ${parsedResult.data.data.transactions.length} validated Ethereum transactions.`,
+
+      setFlow({
+        status: "analyzing",
+        message:
+          "Running deterministic FIFO reconciliation and validating classification evidence…",
+      });
+      const analysisResponse = await fetchWithTimeout("/api/analysis/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactions: parsedResult.data.data.transactions,
+        }),
+      });
+      const analysisPayload: unknown = await analysisResponse.json();
+      const parsedAnalysis =
+        AnalysisReportSuccessSchema.safeParse(analysisPayload);
+
+      if (!analysisResponse.ok || !parsedAnalysis.success) {
+        setFlow({
+          status: "error",
+          title: "Reconciliation report unavailable",
+          message:
+            "Transactions loaded, but the validated report could not be produced. No partial figures are shown.",
+          retryable: true,
+        });
+        return;
+      }
+
+      setResult(
+        liveResultsViewModel(
+          parsedResult.data.data,
+          parsedAnalysis.data.data,
+        ),
       );
-    } catch {
-      setMessage("Could not reach the analysis service. Please retry.");
-    } finally {
-      setIsLoading(false);
+      setFlow({
+        status: "success",
+        message: `Loaded and reconciled ${parsedResult.data.data.transactions.length} validated Ethereum transaction${parsedResult.data.data.transactions.length === 1 ? "" : "s"}.`,
+      });
+    } catch (error) {
+      setFlow({
+        status: "error",
+        title: isTimeoutError(error)
+          ? "Analysis timed out"
+          : "Could not reach the analysis service",
+        message: isTimeoutError(error)
+          ? "The request exceeded 15 seconds and was stopped. No partial result is shown."
+          : "Check your connection and retry. You can still inspect the offline demo.",
+        retryable: true,
+      });
     }
   }
 
   function loadDemo() {
     setAddress(demoAddress);
-    setMessage("Static demo ledger loaded. This is not live blockchain data.");
-    setShowDemoLedger(true);
-    setLiveResult(null);
-    setAnalysisResult(null);
+    setResult(fixtureResultsViewModel(DEMO_LEDGER));
+    setFlow({
+      status: "success",
+      message:
+        "Static demo ledger loaded. Every value below is demonstration data, not live blockchain analysis.",
+    });
   }
 
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-950/70 p-6 shadow-2xl shadow-slate-950/30 sm:p-8">
-      <p className="text-sm font-medium text-cyan-200">Ethereum-only starter</p>
-      <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">
-        Start with a public wallet address
-      </h2>
-      <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
-        Fetch up to 50 recent Ethereum transactions through the server, or load the clearly labelled offline demo. No wallet connection or private key is needed.
-      </p>
-
-      <form className="mt-7" onSubmit={handleSubmit} noValidate>
-        <label className="block text-sm font-medium text-slate-100" htmlFor="wallet-address">
-          Ethereum wallet address
-        </label>
-        <input
-          id="wallet-address"
-          name="wallet-address"
-          value={address}
-          onChange={(event) => setAddress(event.target.value)}
-          placeholder="0x..."
-          spellCheck={false}
-          autoCapitalize="off"
-          className="mt-2 min-h-12 w-full rounded-xl border border-slate-600 bg-slate-900 px-4 font-mono text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-300/30"
-          aria-describedby="address-help address-status"
-        />
-        <p id="address-help" className="mt-2 text-xs leading-5 text-slate-400">
-          Use a public 42-character EVM address. Never enter a seed phrase or private key.
+    <section>
+      <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-6 shadow-2xl shadow-slate-950/30 sm:p-8">
+        <p className="text-sm font-medium text-cyan-200">
+          Ethereum evidence intake
         </p>
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="min-h-12 rounded-xl bg-cyan-300 px-5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 focus-visible:ring-2 focus-visible:ring-cyan-100 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">
+          Start with a public wallet address
+        </h2>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+          Fetch up to 50 recent Ethereum transactions through the server, or
+          load the clearly labelled offline fixture. No wallet connection,
+          private key, or seed phrase is needed.
+        </p>
+
+        <form className="mt-7" onSubmit={handleSubmit} noValidate>
+          <label
+            className="block text-sm font-medium text-slate-100"
+            htmlFor="wallet-address"
           >
-            {isLoading ? "Fetching…" : "Analyze live wallet"}
-          </button>
-          <button
-            type="button"
-            onClick={loadDemo}
-            className="min-h-12 rounded-xl border border-slate-500 px-5 text-sm font-semibold text-white transition hover:border-slate-300 hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-cyan-100 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
-          >
-            Load static demo ledger
-          </button>
-        </div>
-      </form>
-
-      <div id="address-status" className="mt-5" aria-live="polite">
-        {message ? (
-          <p className="rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-3 text-sm leading-6 text-slate-200">
-            {message}
+            Ethereum wallet address
+          </label>
+          <input
+            id="wallet-address"
+            name="wallet-address"
+            value={address}
+            onChange={(event) => setAddress(event.target.value)}
+            placeholder="0x…"
+            spellCheck={false}
+            autoCapitalize="off"
+            className="mt-2 min-h-12 w-full rounded-xl border border-slate-600 bg-slate-900 px-4 font-mono text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-300/30"
+            aria-describedby="address-help flow-status"
+            aria-invalid={
+              flow.status === "error" &&
+              flow.title === "Check the wallet address"
+                ? true
+                : undefined
+            }
+          />
+          <p id="address-help" className="mt-2 text-xs leading-5 text-slate-400">
+            Use a public 42-character EVM address. Never enter a seed phrase or
+            private key.
           </p>
-        ) : null}
-      </div>
-
-      {showDemoLedger ? <DemoLedgerPreview /> : null}
-      {liveResult && !liveResult.isEmpty ? <LiveLedgerPreview result={liveResult} /> : null}
-      {analysisResult ? <AnalysisReportPreview result={analysisResult} /> : null}
-    </section>
-  );
-}
-
-function LiveLedgerPreview({ result }: { result: FetchTransactionsResult }) {
-  return (
-    <section
-      className="mt-6 rounded-2xl border border-emerald-200/20 bg-emerald-100/5 p-5"
-      aria-label="Validated provider transactions"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-emerald-100">
-            Validated Ethereum history
-          </p>
-          <p className="mt-1 text-xs text-emerald-100/75">
-            {result.transactions.length} transaction
-            {result.transactions.length === 1 ? "" : "s"}
-            {result.truncated ? " · capped at 50" : ""}
-          </p>
-        </div>
-        <span className="rounded-full border border-emerald-200/30 px-3 py-1 text-xs font-medium text-emerald-100">
-          LIVE PROVIDER DATA
-        </span>
-      </div>
-      <ul className="mt-4 divide-y divide-emerald-100/10">
-        {result.transactions.map((transaction) => (
-          <li className="py-3 text-sm" key={transaction.id}>
-            <a
-              className="font-mono text-emerald-100 underline decoration-emerald-300/40 underline-offset-4"
-              href={transaction.explorerUrl}
-              rel="noreferrer"
-              target="_blank"
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="min-h-12 rounded-xl bg-cyan-300 px-5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:cursor-wait disabled:opacity-60"
             >
-              {transaction.txHash.slice(0, 10)}…{transaction.txHash.slice(-6)}
-            </a>
-            <p className="mt-1 text-xs text-slate-400">
-              {transaction.assetDeltas.length
-                ? transaction.assetDeltas
-                    .map(
-                      (asset) =>
-                        `${asset.direction} ${asset.amountAtomic} ${asset.symbol} atomic units (${asset.decimals} decimals)`,
-                    )
-                    .join(" · ")
-                : "No wallet-relative native or ERC-20 movement decoded"}
-            </p>
-          </li>
-        ))}
-      </ul>
+              {flow.status === "fetching"
+                ? "Fetching history…"
+                : flow.status === "analyzing"
+                  ? "Reconciling…"
+                  : "Analyze live wallet"}
+            </button>
+            <button
+              type="button"
+              onClick={loadDemo}
+              disabled={isLoading}
+              className="min-h-12 rounded-xl border border-slate-500 px-5 text-sm font-semibold text-white transition hover:border-slate-300 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:cursor-wait disabled:opacity-60"
+            >
+              Load static demo ledger
+            </button>
+          </div>
+        </form>
+
+        <FlowFeedback flow={flow} />
+      </div>
+
+      {result ? (
+        <AnalysisResults
+          key={`${result.source}-${result.generatedAt}`}
+          result={result}
+        />
+      ) : null}
     </section>
   );
 }
 
-function AnalysisReportPreview({
-  result,
-}: {
-  result: AnalysisReportSuccess["data"];
-}) {
-  const isFallback = result.classificationMode === "rule_fallback";
+function FlowFeedback({ flow }: { flow: FlowState }) {
+  if (flow.status === "idle") {
+    return null;
+  }
+
+  const isError = flow.status === "error";
+  const isLoading = flow.status === "fetching" || flow.status === "analyzing";
 
   return (
-    <section
-      className="mt-6 rounded-2xl border border-amber-200/20 bg-amber-100/5 p-5"
-      aria-label="Plain-English tax report"
+    <div
+      id="flow-status"
+      className={`mt-5 rounded-xl border px-4 py-3 ${
+        isError
+          ? "border-rose-300/30 bg-rose-300/10"
+          : flow.status === "empty"
+            ? "border-amber-300/30 bg-amber-300/10"
+            : "border-slate-700 bg-slate-900/80"
+      }`}
+      role={isError ? "alert" : "status"}
+      aria-live={isError ? "assertive" : "polite"}
+      aria-busy={isLoading}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-amber-100">
-            {result.report.title}
-          </p>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-            {result.report.overview}
-          </p>
+      {isLoading ? (
+        <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-slate-700">
+          <div className="h-full w-1/2 animate-pulse rounded-full bg-cyan-300" />
         </div>
-        <span
-          className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-            isFallback
-              ? "border-amber-200/40 text-amber-100"
-              : "border-violet-200/40 text-violet-100"
-          }`}
-        >
-          {isFallback ? "RULE FALLBACK" : "AGENT CLASSIFICATION"}
-        </span>
-      </div>
-
-      <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-xs leading-5 text-slate-300">
-        {result.classificationNotice}
+      ) : null}
+      {isError ? (
+        <p className="text-sm font-semibold text-rose-100">{flow.title}</p>
+      ) : null}
+      <p className={`text-sm leading-6 ${isError ? "text-rose-50" : "text-slate-200"}`}>
+        {flow.message}
       </p>
-
-      <h3 className="mt-5 text-sm font-semibold text-white">
-        Deterministic calculation
-      </h3>
-      <ul className="mt-2 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-300">
-        {result.report.deterministicFindings.map((finding) => (
-          <li key={finding}>{finding}</li>
-        ))}
-      </ul>
-
-      <h3 className="mt-5 text-sm font-semibold text-white">
-        Classification evidence
-      </h3>
-      <ul className="mt-2 divide-y divide-white/10">
-        {result.classifications.map((classification) => (
-          <li className="py-3 text-sm" key={classification.transactionId}>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="capitalize text-slate-100">
-                {classification.category.replaceAll("_", " ")}
-              </span>
-              <span className="text-xs text-slate-400">
-                {Math.round(classification.confidence * 100)}% confidence
-              </span>
-              {classification.needsReview ? (
-                <span className="rounded-full bg-amber-300/10 px-2 py-0.5 text-xs text-amber-100">
-                  NEEDS REVIEW
-                </span>
-              ) : null}
-            </div>
-            <p className="mt-1 text-xs leading-5 text-slate-400">
-              {classification.reason}
-            </p>
-            <p className="mt-1 font-mono text-[11px] text-slate-500">
-              Evidence: {classification.evidenceTxHashes.join(", ")}
-            </p>
-          </li>
-        ))}
-      </ul>
-
-      <p className="mt-5 border-t border-white/10 pt-4 text-xs leading-5 text-amber-100/80">
-        {result.report.disclaimer}
-      </p>
-    </section>
-  );
-}
-
-function DemoLedgerPreview() {
-  return (
-    <section className="mt-6 rounded-2xl border border-cyan-200/20 bg-cyan-100/5 p-5" aria-label="Static demo ledger">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-cyan-100">Static demo ledger</p>
-          <p className="mt-1 text-xs text-cyan-100/75">
-            {DEMO_LEDGER.coverage.fetchedTransactions} fixture transactions · {DEMO_LEDGER.coverage.needsReviewTransactions} needs review
-          </p>
-        </div>
-        <span className="rounded-full border border-cyan-200/30 px-3 py-1 text-xs font-medium text-cyan-100">
-          DEMO DATA
-        </span>
-      </div>
-      <ul className="mt-4 divide-y divide-cyan-100/10">
-        {DEMO_LEDGER.classifications.map((classification) => {
-          const transaction = DEMO_LEDGER.transactions.find(
-            (item) => item.id === classification.transactionId,
-          );
-          const assets = transaction?.assetDeltas.map((asset) => asset.symbol).join(" / ") ?? "Unknown asset";
-
-          return (
-            <li className="flex items-center justify-between gap-4 py-3 text-sm" key={classification.transactionId}>
-              <span className="font-mono text-cyan-50">{assets}</span>
-              <span className="capitalize text-slate-200">{classification.category.replace("_", " ")}</span>
-              <span className="text-xs text-slate-400">{Math.round(classification.confidence * 100)}% confidence</span>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+      {isError && flow.retryable ? (
+        <p className="mt-1 text-xs text-rose-100/80">
+          This error is retryable. Submit the address again after a short wait.
+        </p>
+      ) : null}
+    </div>
   );
 }

@@ -129,6 +129,50 @@ export const DeterministicSummarySchema = z.strictObject({
   excludesTdsCredit: z.literal(true),
 });
 
+export const ReconciledLotSchema = z.strictObject({
+  lotId: z.string().min(1),
+  assetId: z.string().min(1),
+  symbol: z.string().min(1).max(24),
+  decimals: z.number().int().min(0).max(255),
+  quantityAtomic: AtomicAmountSchema,
+  acquiredAt: z.string().datetime({ offset: true }),
+  costBasisInrPaisa: AtomicAmountSchema.nullable(),
+  sourceTxHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+  needsReview: z.boolean(),
+});
+
+export const DisposalMatchSchema = z.strictObject({
+  lotId: z.string().min(1),
+  quantityAtomic: AtomicAmountSchema,
+  costBasisInrPaisa: AtomicAmountSchema.nullable(),
+});
+
+export const ReconciledDisposalSchema = z.strictObject({
+  transactionId: z.string().min(1),
+  txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+  assetId: z.string().min(1),
+  symbol: z.string().min(1).max(24),
+  quantityAtomic: AtomicAmountSchema,
+  proceedsInrPaisa: AtomicAmountSchema.nullable(),
+  costBasisInrPaisa: AtomicAmountSchema.nullable(),
+  taxableGainInrPaisa: AtomicAmountSchema.nullable(),
+  vdaLossInrPaisa: AtomicAmountSchema.nullable(),
+  matchedLots: z.array(DisposalMatchSchema),
+  needsReview: z.boolean(),
+  reviewReasons: z.array(z.string().min(1)),
+});
+
+export const GasTreatmentSchema = z.strictObject({
+  transactionId: z.string().min(1),
+  txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+  gasFeeWei: AtomicAmountSchema,
+  valueInrPaisa: AtomicAmountSchema.nullable(),
+  includedInCostBasis: z.literal(false),
+  deductedFromProceeds: z.literal(false),
+  needsReview: z.boolean(),
+  reason: z.string().min(1),
+});
+
 export const PlainEnglishTaxReportSchema = z.strictObject({
   title: z.string().min(1),
   overview: z.string().min(1),
@@ -153,6 +197,9 @@ export const AnalysisReportSuccessSchema = z.strictObject({
       method: z.literal("deterministic-rules-and-fifo"),
       summary: DeterministicSummarySchema,
       limitations: z.array(z.string().min(1)).min(1),
+      remainingLots: z.array(ReconciledLotSchema),
+      disposals: z.array(ReconciledDisposalSchema),
+      gasTreatments: z.array(GasTreatmentSchema),
     }),
     report: PlainEnglishTaxReportSchema,
   }),
@@ -165,17 +212,7 @@ export const AnalysisReportErrorSchema = z.strictObject({
   }),
 });
 
-export const TaxLotSchema = z.object({
-  lotId: z.string().min(1),
-  assetId: z.string().min(1),
-  symbol: z.string().min(1).max(24),
-  quantityAtomic: AtomicAmountSchema,
-  decimals: z.number().int().min(0).max(255),
-  acquiredAt: z.string().datetime({ offset: true }),
-  costBasisInrPaisa: AtomicAmountSchema.nullable(),
-  sourceTxHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
-  needsReview: z.boolean(),
-});
+export const TaxLotSchema = ReconciledLotSchema;
 
 export const ReportCoverageSchema = z.object({
   address: EvmAddressSchema,
@@ -215,5 +252,7 @@ export type Classification = z.infer<typeof ClassificationSchema>;
 export type ClassificationMode = z.infer<typeof ClassificationModeSchema>;
 export type AnalysisReportSuccess = z.infer<typeof AnalysisReportSuccessSchema>;
 export type TaxLot = z.infer<typeof TaxLotSchema>;
+export type ReconciledDisposal = z.infer<typeof ReconciledDisposalSchema>;
+export type GasTreatment = z.infer<typeof GasTreatmentSchema>;
 export type ReportCoverage = z.infer<typeof ReportCoverageSchema>;
 export type TaxReport = z.infer<typeof TaxReportSchema>;
