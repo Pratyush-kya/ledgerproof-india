@@ -5,6 +5,7 @@ import {
   fetchGoldRushTransactions,
   GoldRushInvalidResponseError,
   GoldRushRateLimitError,
+  GoldRushUnavailableError,
 } from "../src/lib/goldrush";
 
 const address = "0x1234567890abcdef1234567890abcdef12345678";
@@ -150,6 +151,22 @@ describe("GoldRush ingestion", () => {
         fetchImpl: async () => jsonResponse({}, 429),
       }),
     ).rejects.toBeInstanceOf(GoldRushRateLimitError);
+  });
+
+  it("stops a provider request that exceeds the server timeout", async () => {
+    await expect(
+      fetchGoldRushTransactions({
+        address,
+        apiKey: "test-only-key",
+        timeoutMs: 5,
+        fetchImpl: async (_url, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(new DOMException("Timed out", "TimeoutError"));
+            });
+          }),
+      }),
+    ).rejects.toBeInstanceOf(GoldRushUnavailableError);
   });
 
   it("rejects a valid-looking page for a different wallet", async () => {

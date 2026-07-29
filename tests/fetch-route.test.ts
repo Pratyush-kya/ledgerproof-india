@@ -57,6 +57,34 @@ describe("POST /api/analysis/fetch", () => {
     });
   });
 
+  it("returns a concise unavailable-provider state", async () => {
+    process.env.GOLDRUSH_API_KEY = "test-only-key";
+    vi.stubGlobal("fetch", async () => new Response(null, { status: 503 }));
+
+    const response = await POST(request({ address }));
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "UPSTREAM_UNAVAILABLE", retryable: true },
+    });
+  });
+
+  it("rejects an oversized wallet request before contacting a provider", async () => {
+    process.env.GOLDRUSH_API_KEY = "test-only-key";
+    const provider = vi.fn();
+    vi.stubGlobal("fetch", provider);
+
+    const response = await POST(
+      request({ address, padding: "x".repeat(5 * 1024) }),
+    );
+
+    expect(response.status).toBe(413);
+    expect(provider).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "INVALID_REQUEST", retryable: false },
+    });
+  });
+
   it("returns an explicit successful empty-history state", async () => {
     process.env.GOLDRUSH_API_KEY = "test-only-key";
     const emptyFixture = structuredClone(providerFixture);

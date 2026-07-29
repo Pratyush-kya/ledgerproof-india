@@ -14,6 +14,11 @@ import {
   setCachedResponse,
 } from "@/lib/request-guard";
 import {
+  InvalidJsonBodyError,
+  readJsonBody,
+  RequestBodyTooLargeError,
+} from "@/lib/request-body";
+import {
   FetchApiErrorSchema,
   FetchTransactionsRequestSchema,
   FetchTransactionsSuccessSchema,
@@ -21,6 +26,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const MAX_REQUEST_BYTES = 4 * 1024;
 
 function errorResponse(
   status: number,
@@ -58,8 +64,19 @@ export async function POST(request: Request) {
 
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
+    body = await readJsonBody(request, MAX_REQUEST_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return errorResponse(
+        413,
+        "INVALID_REQUEST",
+        "Wallet request is too large.",
+        false,
+      );
+    }
+    if (!(error instanceof InvalidJsonBodyError)) {
+      return errorResponse(400, "INVALID_REQUEST", "Request body could not be read.", false);
+    }
     return errorResponse(400, "INVALID_REQUEST", "Request body must be valid JSON.", false);
   }
 

@@ -263,6 +263,17 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+### Public deployment
+
+- Application: [ledgerproof-india.vercel.app](https://ledgerproof-india.vercel.app/)
+- Health/configuration check:
+  [ledgerproof-india.vercel.app/api/health](https://ledgerproof-india.vercel.app/api/health)
+
+The health route returns only provider-configuration booleans and the selected
+model name. It never returns API-key values. A successful deployment still
+needs one manual analysis using a known active Ethereum address before
+submission.
+
 ### Verification
 
 ```bash
@@ -347,19 +358,19 @@ Do not manufacture transcripts or claim tests that were not executed.
 
 The optional Web3 receipt must remain blocked until all core checks pass:
 
-- [ ] Public deployment opens without login.
+- [x] Public deployment is configured without application authentication.
 - [ ] A fresh wallet analysis completes.
-- [ ] The labelled demo-ledger flow completes.
-- [ ] Facts, inferences, estimates, and unknowns are visibly separated.
-- [ ] LLM and deterministic fallback behavior are understandable.
-- [ ] Lint, tests, production build, and browser tests pass.
-- [ ] No API keys or wallet secrets are exposed.
-- [ ] README claims match the deployed product.
+- [x] The labelled demo-ledger flow completes.
+- [x] Facts, inferences, estimates, and unknowns are visibly separated.
+- [x] LLM and deterministic fallback behavior are understandable.
+- [x] Lint, tests, production build, and browser tests pass locally.
+- [x] No API keys or wallet secrets are exposed.
+- [x] README claims match the implemented product.
 - [ ] Repository, deployment, and demo video show the same version.
 
 ## Submission Deliverables
 
-- **Application:** Not published yet
+- **Application:** [ledgerproof-india.vercel.app](https://ledgerproof-india.vercel.app/)
 - **Public repository:** [Pratyush-kya/ledgerproof-india](https://github.com/Pratyush-kya/ledgerproof-india)
 - **Three-minute demo:** Not recorded yet
 - **Project Description:** Not published yet

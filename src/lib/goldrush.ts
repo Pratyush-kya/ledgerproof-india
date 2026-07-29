@@ -15,6 +15,7 @@ const CHAIN_NAME = "eth-mainnet";
 const ETH_ASSET_ID = "eip155:1/slip44:60";
 const PAGE_LIMIT = 50;
 const MAX_PROVIDER_PAGES = 10;
+const DEFAULT_TIMEOUT_MS = 12_000;
 
 const AtomicAmountSchema = z.string().regex(/^\d+$/);
 const TransactionHashSchema = z.string().regex(/^0x[a-fA-F0-9]{64}$/);
@@ -361,10 +362,12 @@ export async function fetchGoldRushTransactions({
   address,
   apiKey,
   fetchImpl = fetch,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
 }: {
   address: string;
   apiKey: string;
   fetchImpl?: FetchImplementation;
+  timeoutMs?: number;
 }): Promise<FetchTransactionsResult> {
   const validAddress = EvmAddressSchema.parse(address);
   const trimmedApiKey = apiKey.trim();
@@ -395,6 +398,7 @@ export async function fetchGoldRushTransactions({
           Authorization: `Bearer ${trimmedApiKey}`,
         },
         cache: "no-store",
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {
       throw new GoldRushUnavailableError();

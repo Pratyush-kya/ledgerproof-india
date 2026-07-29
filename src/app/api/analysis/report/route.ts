@@ -7,12 +7,18 @@ import {
   requestClientKey,
 } from "@/lib/request-guard";
 import {
+  InvalidJsonBodyError,
+  readJsonBody,
+  RequestBodyTooLargeError,
+} from "@/lib/request-body";
+import {
   AnalysisReportErrorSchema,
   AnalysisReportRequestSchema,
 } from "@/lib/schemas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const MAX_REQUEST_BYTES = 512 * 1024;
 
 function errorResponse(
   status: number,
@@ -47,8 +53,22 @@ export async function POST(request: Request) {
   let body: unknown;
 
   try {
-    body = await request.json();
-  } catch {
+    body = await readJsonBody(request, MAX_REQUEST_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return errorResponse(
+        413,
+        "INVALID_REQUEST",
+        "Analysis request is too large.",
+      );
+    }
+    if (!(error instanceof InvalidJsonBodyError)) {
+      return errorResponse(
+        400,
+        "INVALID_REQUEST",
+        "Request body could not be read.",
+      );
+    }
     return errorResponse(400, "INVALID_REQUEST", "Request body must be valid JSON.");
   }
 
