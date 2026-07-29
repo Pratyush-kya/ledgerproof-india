@@ -2,6 +2,55 @@
 
 Date: 2026-07-29
 
+## Final provider activation steps
+
+Production currently has GoldRush configured, while CoinGecko historical
+pricing and OpenAI classification use their safe degraded behavior. To enable
+both optional providers without exposing credentials:
+
+1. Create a CoinGecko Demo API key in the CoinGecko developer dashboard.
+2. Create a restricted OpenAI project API key with a small project budget.
+3. Open Vercel Project Settings → Environment Variables for
+   `ledgerproof-india`.
+4. Add `COINGECKO_API_KEY` as a sensitive Production variable.
+5. Add `OPENAI_API_KEY` as a sensitive Production variable.
+6. Add `OPENAI_MODEL=gpt-5-mini` as a Production variable.
+7. Do not use a `NEXT_PUBLIC_` prefix for any provider credential.
+8. Redeploy commit `76c376eff5e6ca386010bbe509caa261a9806e11`; environment
+   changes do not modify an already-built deployment.
+9. Verify `/api/health` returns HTTP 200 with
+   `historicalPricesConfigured: true` and
+   `classificationConfigured: true`. This endpoint proves presence, not
+   provider validity.
+10. Analyze a known active public wallet. Confirm the report does not show
+    `RULE FALLBACK` when OpenAI responds successfully and that supported,
+    two-sided swaps receive historical INR evidence when CoinGecko has a price
+    for the transaction date.
+11. Temporarily test invalid keys in a Preview environment only. Confirm price
+    failures omit valuations and OpenAI failures return to deterministic
+    `RULE FALLBACK` without changing arithmetic.
+12. Inspect Vercel runtime errors after the smoke test. Do not log or copy API
+    key values, wallet histories, model payloads, or full reports.
+
+Never paste either secret into Git, Codex chat, screenshots, issue comments, or
+the demo video. Keep the values in Vercel and ignored local `.env.local` only.
+
+## Final production re-verification
+
+- Local `main`, GitHub `main`, and production match at
+  `76c376eff5e6ca386010bbe509caa261a9806e11`.
+- Current Vercel production deployment:
+  `dpl_2ybPkEjJpasf9KuAtn2xrQ6E2znB` (`READY`).
+- The public no-login landing page, static demo, invalid-address state, and a
+  live 50-transaction wallet analysis were exercised successfully.
+- The live report used deterministic rule fallback because OpenAI was not
+  configured. CoinGecko was also not configured, so missing historical price
+  evidence was omitted and visibly marked instead of guessed.
+- No Vercel runtime error clusters were reported for the inspected seven-day
+  range.
+- Fresh lint, type checking, the 55-test Vitest suite, and the production build
+  passed.
+
 ## Objective
 
 Harden the Day 5 core flow for a public Vercel release without adding the

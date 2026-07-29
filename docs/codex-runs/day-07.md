@@ -2,6 +2,49 @@
 
 Date: 2026-07-29
 
+## Final production re-verification
+
+- Re-verified local checkout, GitHub `main`, and the Vercel production
+  deployment at commit `76c376eff5e6ca386010bbe509caa261a9806e11`.
+- Vercel deployment `dpl_2ybPkEjJpasf9KuAtn2xrQ6E2znB` is `READY`, targets
+  production, and serves `ledgerproof-india.vercel.app`.
+- The public landing page opened without authentication.
+- The static demo rendered its labelled fixture, deterministic figures,
+  unknown-asset exclusion, FIFO evidence, and JSON export control.
+- A live analysis of a known active public Ethereum address loaded and
+  reconciled 50 validated transactions. Missing evidence and unsupported
+  assets were excluded rather than assigned guessed figures.
+- Invalid-address handling remained concise and blocked the API flow.
+- `/api/health` returned HTTP 200 with `blockchainConfigured: true`,
+  `historicalPricesConfigured: false`, and
+  `classificationConfigured: false`. Production therefore used the designed
+  rule fallback and omitted unavailable historical INR evidence.
+- Vercel reported no runtime error clusters in the inspected seven-day range.
+- Fresh local checks passed: lint, type checking, 55 Vitest tests, and the
+  Next.js production build.
+- All six Playwright assertions passed. On the restricted Windows runner the
+  Playwright wrapper did not exit after printing the six passes because its
+  spawned Next.js server could not be terminated by the runner. This is a
+  runner-cleanup limitation; no assertion failed.
+
+## Provider-enhanced demo gate
+
+Before recording the provider-enhanced final demo:
+
+- [ ] Add sensitive Production variables `COINGECKO_API_KEY` and
+      `OPENAI_API_KEY` in Vercel.
+- [ ] Set `OPENAI_MODEL=gpt-5-mini` in Production.
+- [ ] Redeploy the already-reviewed commit; never expose or commit the values.
+- [ ] Confirm `/api/health` reports both optional providers as configured.
+- [ ] Run a known active wallet and confirm successful OpenAI output no longer
+      displays `RULE FALLBACK`.
+- [ ] Use a supported two-sided historical swap and confirm CoinGecko evidence
+      appears only when a valid dated INR price exists.
+- [ ] Confirm provider failure still falls back safely and never changes
+      deterministic FIFO or tax arithmetic.
+- [ ] Inspect Vercel runtime errors and ensure no credentials, raw histories,
+      model payloads, or full reports are logged.
+
 ## Prompt supplied to Codex
 
 > Act as a skeptical hackathon judge and release engineer for LedgerProof
