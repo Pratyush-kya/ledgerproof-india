@@ -19,8 +19,13 @@ import {
 const GOLDRUSH_ORIGIN = "https://api.covalenthq.com";
 const CHAIN_NAME = "eth-mainnet";
 const ETH_ASSET_ID = "eip155:1/slip44:60";
-const MAX_PROVIDER_PAGES = 10;
+const PROVIDER_PAGE_SIZE = 50;
+const MAX_PROVIDER_PAGES = Math.ceil(
+  MAX_DEMO_TRANSACTIONS / PROVIDER_PAGE_SIZE,
+);
 const DEFAULT_TIMEOUT_MS = 12_000;
+const DEFAULT_TOTAL_TIMEOUT_MS = 35_000;
+const MIN_PAGE_BUDGET_MS = 1_000;
 
 const AtomicAmountSchema = z.string().regex(/^\d+$/);
 const TransactionHashSchema = z.string().regex(/^0x[a-fA-F0-9]{64}$/);
@@ -50,7 +55,8 @@ const GoldRushLogEventSchema = z.object({
         .nullish()
         .transform((params) => params ?? []),
     })
-    .nullable(),
+    .nullish()
+    .transform((decoded) => decoded ?? null),
 });
 
 const GoldRushTransactionSchema = z.object({
@@ -61,7 +67,9 @@ const GoldRushTransactionSchema = z.object({
   from_address: EvmAddressSchema,
   to_address: EvmAddressSchema.nullable(),
   value: AtomicAmountSchema,
-  fees_paid: AtomicAmountSchema,
+  gas_spent: z.number().int().nonnegative().safe(),
+  gas_price: z.number().int().nonnegative().safe(),
+  fees_paid: z.union([AtomicAmountSchema, z.number().nonnegative()]),
   function_name: z.string().min(1).nullable().optional(),
   explorers: z
     .array(
@@ -72,6 +80,8 @@ const GoldRushTransactionSchema = z.object({
     )
     .optional()
     .default([]),
+  chain_id: z.union([z.literal(1), z.literal("1")]),
+  chain_name: z.literal(CHAIN_NAME),
 
   // Convert missing or null log_events to an empty array.
   log_events: z
@@ -80,32 +90,20 @@ const GoldRushTransactionSchema = z.object({
     .transform((events) => events ?? []),
 });
 
-const GoldRushPageSchema = z.object({
-  address: EvmAddressSchema,
-  chain_id: z.literal(1),
-  chain_name: z.literal(CHAIN_NAME),
-  // GoldRush may return null for the first or only page.
-  current_page: z
-    .number()
-    .int()
-    .nonnegative()
-    .nullish()
-    .transform((page) => page ?? 0),
-  links: z.object({
-    prev: z.string().url().nullable().optional(),
-    next: z.string().url().nullable().optional(),
-  }),
+const GoldRushCursorPageSchema = z.object({
+  cursor_before: z.string().min(1).max(4_096).nullable().optional(),
+  cursor_after: z.string().min(1).max(4_096).nullable().optional(),
   items: z.array(GoldRushTransactionSchema),
 });
 
 const GoldRushEnvelopeSchema = z.object({
-  data: GoldRushPageSchema.nullable(),
+  data: GoldRushCursorPageSchema.nullable(),
   error: z.boolean(),
   error_message: z.string().nullable().optional(),
   error_code: z.number().nullable().optional(),
 });
 
-type GoldRushPage = z.infer<typeof GoldRushPageSchema>;
+type GoldRushCursorPage = z.infer<typeof GoldRushCursorPageSchema>;
 type GoldRushTransaction = z.infer<typeof GoldRushTransactionSchema>;
 type FetchImplementation = typeof fetch;
 
@@ -124,40 +122,37 @@ export class GoldRushInvalidResponseError extends Error {
 }
 
 export class GoldRushUnavailableError extends Error {
-  constructor() {
+  readonly reason: "network" | "timeout" | "http";
+  readonly status: number | null;
+
+  constructor({
+    reason = "network",
+    status = null,
+  }: {
+    reason?: "network" | "timeout" | "http";
+    status?: number | null;
+  } = {}) {
     super("GoldRush is temporarily unavailable.");
     this.name = "GoldRushUnavailableError";
+    this.reason = reason;
+    this.status = status;
   }
 }
 
-function buildInitialUrl(address: string) {
-  const url = new URL(
-    `/v1/${CHAIN_NAME}/address/${encodeURIComponent(address)}/transactions_v3/`,
-    GOLDRUSH_ORIGIN,
-  );
+function buildTransactionsUrl(address: string, before: string | null) {
+  const url = new URL("/v1/allchains/transactions/", GOLDRUSH_ORIGIN);
 
+  url.searchParams.set("chains", CHAIN_NAME);
+  url.searchParams.set("addresses", address);
+  url.searchParams.set("limit", String(PROVIDER_PAGE_SIZE));
+  url.searchParams.set("with-decoded-logs", "true");
   url.searchParams.set("quote-currency", "INR");
 
-  return url;
-}
-
-function validateNextUrl(nextUrl: string, address: string) {
-  const parsed = new URL(nextUrl);
-
-  const expectedPathPrefix =
-    `/v1/${CHAIN_NAME}/address/${encodeURIComponent(address)}/transactions_v3/`.toLowerCase();
-
-  if (
-    parsed.protocol !== "https:" ||
-    parsed.origin !== GOLDRUSH_ORIGIN ||
-    !parsed.pathname.toLowerCase().startsWith(expectedPathPrefix)
-  ) {
-    throw new GoldRushInvalidResponseError(
-      "GoldRush returned an unsafe pagination link.",
-    );
+  if (before) {
+    url.searchParams.set("before", before);
   }
 
-  return parsed;
+  return url;
 }
 
 function logValidationIssues(error: z.ZodError) {
@@ -171,7 +166,7 @@ function logValidationIssues(error: z.ZodError) {
   );
 }
 
-function unwrapProviderPage(payload: unknown): GoldRushPage {
+function unwrapProviderPage(payload: unknown): GoldRushCursorPage {
   /*
    * Determine whether GoldRush returned its normal envelope:
    * { data, error, error_message, error_code }
@@ -201,8 +196,8 @@ function unwrapProviderPage(payload: unknown): GoldRushPage {
     return parsedEnvelope.data.data;
   }
 
-  // Support direct-page responses used by fixtures or provider variations.
-  const parsedPage = GoldRushPageSchema.safeParse(payload);
+  // Support a direct-page response without weakening field validation.
+  const parsedPage = GoldRushCursorPageSchema.safeParse(payload);
 
   if (!parsedPage.success) {
     logValidationIssues(parsedPage.error);
@@ -356,7 +351,12 @@ export function normalizeGoldRushTransaction(
       `https://etherscan.io/tx/${transaction.tx_hash}`,
     status: transaction.successful ? "confirmed" : "failed",
     assetDeltas,
-    gasFeeWei: transaction.fees_paid,
+    gasFeeWei:
+      typeof transaction.fees_paid === "string"
+        ? transaction.fees_paid
+        : (
+            BigInt(transaction.gas_price) * BigInt(transaction.gas_spent)
+          ).toString(),
     methodName: transaction.function_name ?? null,
     decodedEventNames,
     contractAddresses,
@@ -369,12 +369,14 @@ export async function fetchGoldRushTransactions({
   financialYear,
   fetchImpl = fetch,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  totalTimeoutMs = DEFAULT_TOTAL_TIMEOUT_MS,
 }: {
   address: string;
   apiKey: string;
   financialYear?: string;
   fetchImpl?: FetchImplementation;
   timeoutMs?: number;
+  totalTimeoutMs?: number;
 }): Promise<FetchTransactionsResult> {
   const validAddress = EvmAddressSchema.parse(address);
   const selectedFinancialYear = financialYear
@@ -392,30 +394,58 @@ export async function fetchGoldRushTransactions({
   const transactions: NormalizedTransaction[] = [];
   const seenHashes = new Set<string>();
 
-  let nextUrl: URL | null = buildInitialUrl(validAddress);
+  const startedAt = Date.now();
+  let cursorBefore: string | null = null;
+  let hasMore = true;
   let pagesFetched = 0;
   let truncated = false;
   let selectedPeriodTransactions = 0;
 
   while (
-    nextUrl &&
+    hasMore &&
     transactions.length < MAX_DEMO_TRANSACTIONS &&
     pagesFetched < MAX_PROVIDER_PAGES
   ) {
+    const remainingTotalMs =
+      totalTimeoutMs - (Date.now() - startedAt);
+
+    if (pagesFetched > 0 && remainingTotalMs < MIN_PAGE_BUDGET_MS) {
+      truncated = true;
+      break;
+    }
+
+    const requestTimeoutMs = Math.max(
+      1,
+      Math.min(timeoutMs, remainingTotalMs),
+    );
     let response: Response;
 
     try {
-      response = await fetchImpl(nextUrl, {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${trimmedApiKey}`,
+      response = await fetchImpl(
+        buildTransactionsUrl(validAddress, cursorBefore),
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${trimmedApiKey}`,
+          },
+          cache: "no-store",
+          signal: AbortSignal.timeout(requestTimeoutMs),
         },
-        cache: "no-store",
-        signal: AbortSignal.timeout(timeoutMs),
+      );
+    } catch (error) {
+      if (pagesFetched > 0) {
+        truncated = true;
+        break;
+      }
+
+      throw new GoldRushUnavailableError({
+        reason:
+          error instanceof DOMException &&
+          (error.name === "TimeoutError" || error.name === "AbortError")
+            ? "timeout"
+            : "network",
       });
-    } catch {
-      throw new GoldRushUnavailableError();
     }
 
     if (response.status === 429) {
@@ -423,7 +453,10 @@ export async function fetchGoldRushTransactions({
     }
 
     if (!response.ok) {
-      throw new GoldRushUnavailableError();
+      throw new GoldRushUnavailableError({
+        reason: "http",
+        status: response.status,
+      });
     }
 
     let payload: unknown;
@@ -435,12 +468,6 @@ export async function fetchGoldRushTransactions({
     }
 
     const page = unwrapProviderPage(payload);
-
-    if (page.address.toLowerCase() !== validAddress.toLowerCase()) {
-      throw new GoldRushInvalidResponseError(
-        "GoldRush returned history for a different wallet address.",
-      );
-    }
 
     pagesFetched += 1;
 
@@ -478,17 +505,23 @@ export async function fetchGoldRushTransactions({
       transactions.push(normalized);
     }
 
-    if (transactions.length === MAX_DEMO_TRANSACTIONS) {
-      truncated = truncated || Boolean(page.links.next);
-      break;
+    const nextCursor = page.cursor_before ?? null;
+    if (nextCursor && nextCursor === cursorBefore) {
+      throw new GoldRushInvalidResponseError(
+        "GoldRush returned a repeated pagination cursor.",
+      );
     }
 
-    nextUrl = page.links.next
-      ? validateNextUrl(page.links.next, validAddress)
-      : null;
+    cursorBefore = nextCursor;
+    hasMore = Boolean(cursorBefore);
+
+    if (transactions.length === MAX_DEMO_TRANSACTIONS) {
+      truncated = truncated || hasMore;
+      break;
+    }
   }
 
-  if (nextUrl) {
+  if (hasMore) {
     truncated = true;
   }
 
@@ -503,6 +536,6 @@ export async function fetchGoldRushTransactions({
       ? selectedPeriodTransactions === 0
       : transactions.length === 0,
     truncated,
-    historyComplete: !truncated && !nextUrl,
+    historyComplete: !truncated && !hasMore,
   });
 }

@@ -15,6 +15,25 @@ function request(body: unknown) {
   });
 }
 
+function cursorEnvelope(items = structuredClone(providerFixture.data.items)) {
+  return {
+    data: {
+      cursor_before: null,
+      cursor_after: null,
+      items: items.map((item) => ({
+        ...item,
+        gas_spent: 21_000,
+        gas_price: Number(BigInt(item.fees_paid) / BigInt(21_000)),
+        chain_id: "1",
+        chain_name: "eth-mainnet",
+      })),
+    },
+    error: false,
+    error_message: null,
+    error_code: null,
+  };
+}
+
 afterEach(() => {
   resetRequestGuardsForTests();
   vi.unstubAllGlobals();
@@ -87,12 +106,10 @@ describe("POST /api/analysis/fetch", () => {
 
   it("returns an explicit successful empty-history state", async () => {
     process.env.GOLDRUSH_API_KEY = "test-only-key";
-    const emptyFixture = structuredClone(providerFixture);
-    emptyFixture.data.items = [];
     vi.stubGlobal(
       "fetch",
       async () =>
-        new Response(JSON.stringify(emptyFixture), {
+        new Response(JSON.stringify(cursorEnvelope([])), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         }),

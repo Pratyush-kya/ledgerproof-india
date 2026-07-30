@@ -144,6 +144,55 @@ Current command evidence:
 No commit, push, Vercel deployment, contract deployment, wallet signature, or
 blockchain transaction was made.
 
+## Post-Day 8 live-wallet ingestion hotfix
+
+The production deployment at commit
+`e591b989f69e9ccdda13d251d6b89b029fbcadf4` returned `502` for
+`0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045` in FY 2026-27.
+Production logs showed a caught `POST /api/analysis/fetch 502`, with no
+uncaught runtime error. A sanitized provider probe established the cause:
+
+- the original GoldRush address-history endpoint accepted the server-only key
+  and returned HTTP `200`;
+- the response exceeded 982 KB and was still downloading after 30 seconds;
+- LedgerProof's 12-second per-page timeout therefore produced the concise
+  unavailable-provider state.
+
+The ingestion client now uses GoldRush's bounded cursor endpoint with:
+
+- Ethereum mainnet and the requested public address fixed in a server-created
+  URL;
+- 50 records per page, decoded logs enabled, a 250-record cap, a 12-second
+  per-page timeout, and a 35-second total fetch budget;
+- provider cursors copied only into the `before` query parameter on the fixed
+  GoldRush origin, preventing cursor-controlled host changes;
+- validated partial results marked `truncated: true` and
+  `historyComplete: false` when a later page exceeds the safe budget;
+- exact gas fees derived with `BigInt(gas_price) * BigInt(gas_spent)` when the
+  cursor API returns `fees_paid` as an unsafe JSON number;
+- missing decoded log objects treated as undecoded evidence rather than a
+  whole-wallet failure;
+- secret-safe diagnostics containing only failure reason and HTTP status, with
+  no API key, wallet, transaction, or report logging.
+
+Concrete verification evidence:
+
+- bounded provider probe: HTTP `200`, 50 items, about 298 KB in 8.8 seconds;
+- fixed local route for the reported wallet/FY: HTTP `200`, 50 validated
+  transactions in about 19.7 seconds, `truncated: true`,
+  `historyComplete: false`;
+- real browser flow: “Reconciled 50 validated transactions,” live-provider
+  report rendered, no error overlay, and no browser console error;
+- Vitest: **66/66 passed**;
+- Solidity tests: **3/3 passed**;
+- TypeScript, zero-warning ESLint, and production build: **passed**;
+- Playwright core browser suite: **6/6 passed**;
+- `git diff --check`: **clean**, apart from expected Windows line-ending
+  warnings.
+
+This hotfix is local only. The public Vercel deployment will retain the old
+timeout behavior until these reviewed changes are committed and redeployed.
+
 ## Required clean-room verification
 
 From the real repository directory:
@@ -236,7 +285,7 @@ never needs a private key.
 | Unhandled UI states | Dedicated browser cases pass for disabled, connection, confirmation, pending, success, rejection, wrong-chain, provider error, and duplicate paths. Test-controlled RPC gates hold transient states until they are asserted. |
 | Contract-address risk | Configuration accepts only a nonzero 20-byte public address, but operators must still verify deployed bytecode before enabling it. |
 | Front-running/ownership claim | Anybody who learns a hash can register it first. The receipt proves only that an address submitted that hash at a testnet time; it is not identity, report ownership, tax correctness, or filing proof. |
-| Core calculation regression | No reconciliation, classification, pricing, FIFO, or tax-arithmetic source file was changed. All 63 Vitest cases and all six core Playwright assertions passed. |
+| Core calculation regression | Wallet ingestion changed, but no reconciliation, classification, pricing, FIFO, or tax-arithmetic source file changed. All 66 Vitest cases and all six core Playwright assertions passed. |
 
 ## Remaining risks
 
@@ -251,6 +300,9 @@ never needs a private key.
 5. The configured contract address is public client configuration, not a
    secret, but a wrong or malicious address could present misleading wallet
    prompts. Verify bytecode before enabling it.
+6. Very active wallets can exceed the bounded public-demo fetch budget. The app
+   now returns validated partial evidence and visibly marks history incomplete
+   instead of failing the whole flow or implying complete tax coverage.
 
 ## Decision
 

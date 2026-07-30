@@ -149,6 +149,10 @@ export async function POST(request: Request) {
       );
     }
     if (error instanceof GoldRushUnavailableError) {
+      console.warn("[analysis/fetch] blockchain provider unavailable", {
+        reason: error.reason,
+        status: error.status,
+      });
       return errorResponse(
         502,
         "UPSTREAM_UNAVAILABLE",
