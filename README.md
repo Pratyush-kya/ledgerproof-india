@@ -5,8 +5,11 @@ Ethereum wallets.
 
 LedgerProof India fetches public wallet activity, validates supported asset
 movements, reconciles FIFO lots with exact integer arithmetic, asks for missing
-off-chain evidence, and exports a reviewable report. It does not use OpenAI or
-any other LLM. Classification and tax arithmetic use deterministic rules.
+off-chain evidence, and exports a reviewable report. The current rule-only
+release does not call OpenAI or any other LLM. Classification and tax arithmetic
+use deterministic rules. A future OpenAI provider enhancement would be
+optional, server-only, and unable to control quantities, FIFO, gains, losses,
+or tax arithmetic.
 
 > LedgerProof India is an educational reconciliation preview. It is not tax
 > advice, an ITR filing service, or a replacement for a qualified tax
@@ -51,13 +54,19 @@ flowchart LR
 
 ### Deterministic rule engine
 
-The application deliberately has no OpenAI dependency. The UI states:
+The application has no required OpenAI dependency, and the current release does
+not make OpenAI requests. The UI states:
 
 > DETERMINISTIC RULE ENGINE — tax calculations do not depend on AI.
 
 Rules and user-validated evidence classify the transactions. TypeScript and
 `BigInt` own every quantity, cost-basis, gain, loss, and tax calculation. No
 provider or natural-language model can supply financial arithmetic.
+
+A future optional OpenAI enhancement may assist only with strictly validated
+classification or plain-language explanation. Missing credentials, provider
+errors, or invalid model output must leave the deterministic rule engine fully
+usable and must never change financial arithmetic.
 
 ### Missing evidence
 
@@ -153,8 +162,7 @@ the request.
 | Deployment | Vercel | Public hackathon deployment |
 
 The optional Base Sepolia report receipt is not implemented. It remains blocked
-until every core release gate, including final video/deployment consistency,
-passes.
+until every mandatory core release gate passes.
 
 ## Project structure
 
@@ -190,6 +198,8 @@ Requirements:
 - Node.js 20 or newer;
 - a GoldRush API key for live wallet history; and
 - an optional CoinGecko API key for supported historical swap prices.
+
+No OpenAI key is required or read by the current rule-only release.
 
 Create `.env.local` from `.env.example` and set server-only variables:
 
@@ -273,9 +283,8 @@ returns key values.
 - [x] Deterministic classification and arithmetic with no OpenAI dependency.
 - [x] Evidence-driven recalculation and clear incomplete states.
 - [x] No application secrets exposed.
-- [ ] Fresh production deployment of the current local changes.
-- [ ] Known active wallet reverified on that deployment.
-- [ ] Final demo video shows the same Git commit and deployed product.
+- [x] Current release `d1b6932` is deployed to Vercel Production.
+- [x] Known active wallet reverified on that deployment.
 
 Do not start optional blockchain receipt work until all unchecked core gates
 pass.

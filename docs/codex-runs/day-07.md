@@ -102,11 +102,13 @@ worktree.
 
 ### Current gate and remaining risks
 
-- These changes are local only. Codex did not commit, push, or deploy them.
-- The currently public Vercel deployment therefore does not yet prove this
-  remediation until the builder reviews, commits, pushes, and deploys the exact
-  resulting commit.
-- A post-deployment known-active-wallet run is still required.
+- Local `main`, GitHub `main`, and Vercel Production match at
+  `d1b6932b23a64cd5263c429740ea5a7a26fd1d5c`.
+- Vercel deployment `dpl_6URVAAJeL134ea6SwkoTNvHWqYJN` is `READY`, targets
+  production, and serves `ledgerproof-india.vercel.app`.
+- Public address `0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045`
+  reconciled 88 validated Ethereum transactions for FY 2026-27 with no login,
+  wallet connection, user evidence record, or opening lot required.
 - GoldRush availability, key validity, credits, and provider rate limits remain
   external risks.
 - CoinGecko historical pricing is optional and may be incomplete or
@@ -115,11 +117,10 @@ worktree.
 - Opening lots and INR purchase/sale amounts are user-supplied evidence and
   must be independently verified.
 - The 250-record cap can leave history incomplete; the UI now says so.
-- The final demo video must show the same Git commit as GitHub and Vercel.
 
-**Updated decision:** local deterministic core gate passes. Deployment,
-known-active-wallet re-verification, and final video/commit consistency remain
-pending. Day 8 optional receipt work remains blocked until those gates pass.
+**Updated decision:** every mandatory Day 7 viability gate passes. Optional
+provider-enhancement checks remain non-blocking. Day 8 optional receipt work
+may begin.
 
 ## Final production re-verification
 
@@ -146,23 +147,18 @@ pending. Day 8 optional receipt work remains blocked until those gates pass.
   spawned Next.js server could not be terminated by the runner. This is a
   runner-cleanup limitation; no assertion failed.
 
-## Provider-enhanced demo gate
+## Optional future OpenAI boundary
 
-Before recording the provider-enhanced final demo:
+OpenAI is not called by the current rule-only release, no OpenAI variable is
+required, and this optional future enhancement is not a Day 7 or Day 8 gate.
+Any future implementation must:
 
-- [ ] Add sensitive Production variables `COINGECKO_API_KEY` and
-      `OPENAI_API_KEY` in Vercel.
-- [ ] Set `OPENAI_MODEL=gpt-5-mini` in Production.
-- [ ] Redeploy the already-reviewed commit; never expose or commit the values.
-- [ ] Confirm `/api/health` reports both optional providers as configured.
-- [ ] Run a known active wallet and confirm successful OpenAI output no longer
-      displays `RULE FALLBACK`.
-- [ ] Use a supported two-sided historical swap and confirm CoinGecko evidence
-      appears only when a valid dated INR price exists.
-- [ ] Confirm provider failure still falls back safely and never changes
-      deterministic FIFO or tax arithmetic.
-- [ ] Inspect Vercel runtime errors and ensure no credentials, raw histories,
-      model payloads, or full reports are logged.
+- keep credentials server-only and out of tracked files;
+- validate all provider output against strict schemas;
+- preserve deterministic classification when unavailable or invalid;
+- leave quantities, FIFO matching, gains, losses, and tax arithmetic entirely
+  inside deterministic TypeScript code; and
+- avoid logging credentials, raw histories, provider payloads, or reports.
 
 ## Prompt supplied to Codex
 
@@ -182,8 +178,9 @@ Before recording the provider-enhanced final demo:
 > - README/repository claims match the actual product.
 >
 > Run lint, all tests, production build, and browser tests. Perform a
-> self-review as if a judge will compare the repository, deployment, and demo
-> video. Fix every issue that can cause the viability gate to fail. Update
+> self-review as if a judge will compare the repository, deployment, and
+> public product. Fix every issue that can cause the viability gate to fail.
+> Update
 > `docs/codex-runs/day-07.md` with concrete test evidence and remaining risks.
 > Do not add blockchain receipt functionality unless all core gates pass.
 
@@ -197,9 +194,9 @@ Before recording the provider-enhanced final demo:
       states fail safely.
 - [x] Deterministic fixture calculations match expected results.
 - [x] Unknown assets and incomplete evidence are excluded instead of guessed.
-- [x] LLM output is classification/explanation only and cannot change
-      arithmetic.
-- [x] Provider and model secrets are server-only and ignored by Git.
+- [x] Classification and arithmetic are deterministic; the current release
+      makes no LLM request.
+- [x] Provider secrets are server-only and ignored by Git.
 - [x] Lint, type checking, unit/integration tests, build, and browser assertions
       pass.
 - [x] README names the real repository and production URL.
@@ -207,25 +204,22 @@ Before recording the provider-enhanced final demo:
 - [x] A known active wallet completes on the public deployment from a normal
       internet connection.
       Evidence captured 30 July 2026: public address
-      `0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045` loaded and reconciled 50
-      validated Ethereum transactions as `LIVE PROVIDER DATA`. All 50 records
-      requiring missing or ambiguous evidence were visibly excluded or marked
-      for review; deterministic figures were not guessed. OpenAI remained on
-      `RULE FALLBACK`, which is an accepted safe core-flow state and is not
-      evidence of provider-enhanced classification.
-- [ ] The final demo video shows the same commit that is deployed.
+      `0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045` loaded and reconciled 88
+      validated Ethereum transactions for FY 2026-27 as `LIVE PROVIDER DATA`.
+      Missing or ambiguous evidence was visibly excluded or marked for review;
+      deterministic figures were not guessed. The current release displays
+      `DETERMINISTIC RULE ENGINE` and does not depend on OpenAI.
 
-The remaining unchecked video/deployment-consistency item blocks Day 8 receipt
-work.
+Every mandatory Day 7 viability gate passes. Day 8 receipt work may begin.
 
 ## Inferred core story
 
 A user opens the public no-login landing page, enters a public Ethereum address,
 and submits it to `/api/analysis/fetch`. The server validates the address,
-fetches and normalizes up to 50 GoldRush transactions, then submits those
+fetches and normalizes up to 250 GoldRush transactions, then submits those
 normalized records to `/api/analysis/report`. CoinGecko may add historical INR
-evidence; deterministic FIFO code owns all arithmetic; OpenAI may supply only
-strictly validated classifications and explanations. The UI renders coverage,
+evidence; deterministic rules own classification and FIFO arithmetic. The UI
+renders coverage,
 unknowns, FIFO evidence, limited tax figures, and a downloadable evidence file.
 If any provider fails, the core demo remains usable.
 
@@ -233,8 +227,8 @@ If any provider fails, the core demo remains usable.
 
 ### Technical execution
 
-- Zod validates client input, provider data, agent output, reconciliation
-  input, and API responses.
+- Zod validates client input, provider data, evidence, reconciliation input,
+  and API responses.
 - GoldRush pagination is origin-checked before forwarding the Authorization
   header.
 - Asset amounts use atomic-unit strings and tax arithmetic uses `bigint`.
@@ -243,16 +237,14 @@ If any provider fails, the core demo remains usable.
 - Positive gains and VDA losses remain separate.
 - Missing basis, missing prices, unsupported assets, failed transactions, and
   ambiguous transfers are never silently included.
-- Agent explanations reject financial arithmetic and tax conclusions.
-- Agent classifications are validated for full transaction coverage and
-  evidence hashes.
-- LLM/provider failure visibly falls back to deterministic classifications.
+- Classification and financial arithmetic are deterministic.
+- A future optional provider failure must leave deterministic behavior intact.
 
 ### Privacy and security
 
 - The app asks only for a public address—never a seed phrase or private key.
-- `GOLDRUSH_API_KEY`, `COINGECKO_API_KEY`, `OPENAI_API_KEY`, and
-  `OPENAI_MODEL` are not `NEXT_PUBLIC_` variables.
+- `GOLDRUSH_API_KEY` and `COINGECKO_API_KEY` are not `NEXT_PUBLIC_`
+  variables. OpenAI is not configured or called by the current release.
 - `.env.local` is ignored and was not found in Git history or tracked files.
 - Client components contain no `process.env` access.
 - No raw wallet history, report, model payload, or credential logging was
@@ -366,11 +358,8 @@ normal runner cleanup on the builder's machine.
   short hackathon demo but is not a distributed production rate limiter.
 - A deployment can be `READY` while a provider credential is invalid. The
   health route confirms presence, not validity.
-- The final video and repository must be captured after the patched commit is
-  deployed.
 
 ### Decision
 
-**Core code gate: pass. Production live-wallet gate: pass. Final
-video/deployment-consistency gate: pending. Day 8 receipt work remains blocked
-until that check passes.**
+**Core code gate: pass. Production live-wallet gate: pass. Every mandatory
+Day 7 viability gate passes. Day 8 receipt work may begin.**

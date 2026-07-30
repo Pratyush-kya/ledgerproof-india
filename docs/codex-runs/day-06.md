@@ -32,8 +32,8 @@ both optional providers without exposing credentials:
 12. Inspect Vercel runtime errors after the smoke test. Do not log or copy API
     key values, wallet histories, model payloads, or full reports.
 
-Never paste either secret into Git, Codex chat, screenshots, issue comments, or
-the demo video. Keep the values in Vercel and ignored local `.env.local` only.
+Never paste either secret into Git, Codex chat, screenshots, or issue comments.
+Keep the values in Vercel and ignored local `.env.local` only.
 
 ## Final production re-verification
 
