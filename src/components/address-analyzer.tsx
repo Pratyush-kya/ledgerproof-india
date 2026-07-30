@@ -73,7 +73,11 @@ function replaceEvidence(
   ];
 }
 
-export function AddressAnalyzer() {
+export function AddressAnalyzer({
+  receiptContractAddress,
+}: {
+  receiptContractAddress: string | null;
+}) {
   const [address, setAddress] = useState("");
   const [financialYear, setFinancialYear] = useState(currentFinancialYear);
   const [flow, setFlow] = useState<FlowState>({ status: "idle" });
@@ -466,6 +470,7 @@ export function AddressAnalyzer() {
       {result ? (
         <AnalysisResults
           result={result}
+          receiptContractAddress={receiptContractAddress}
           isReanalyzing={flow.status === "analyzing"}
           onResolveEvidence={
             result.source === "live" ? handleResolveEvidence : undefined

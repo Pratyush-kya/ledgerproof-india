@@ -33,10 +33,14 @@ The public, no-login application supports:
 - quarantine of isolated unsupported inbound token spam without discarding
   valid supported movements;
 - precise complete, partial, blocked, no-disposal, and genuine-zero states;
-- a labelled static demo ledger; and
-- JSON evidence export, including quarantined and unsafe unsupported movements.
+- a labelled static demo ledger;
+- JSON evidence export, including quarantined and unsafe unsupported movements;
+  and
+- an optional, disabled-by-default Base Sepolia hash receipt after a report is
+  complete.
 
-No login, wallet connection, seed phrase, or private key is required.
+No login, seed phrase, or private key is required. A browser wallet is requested
+only when the user explicitly opens the optional receipt flow.
 
 ## Core workflow
 
@@ -132,6 +136,27 @@ which addresses income from transfer, cost of acquisition, and loss set-off.
 LedgerProof labels FIFO as its accounting assumption; it does not claim that
 Section 115BBH mandates FIFO.
 
+### Optional Base Sepolia receipt
+
+The report remains complete without a blockchain receipt. The receipt panel is
+unavailable unless `NEXT_PUBLIC_BASE_SEPOLIA_REPORT_RECEIPT_ADDRESS` contains a
+reviewed deployed contract address.
+
+When enabled, the browser:
+
+1. canonicalizes the in-memory report using
+   `ledgerproof-report-receipt-v1`;
+2. recursively sorts object keys while preserving array order;
+3. encodes that canonical JSON string as UTF-8;
+4. computes `keccak256` with viem;
+5. checks Base Sepolia and duplicate status; and
+6. asks for a separate user confirmation before sending `mintReceipt`.
+
+Only the `bytes32` hash, signing address, and block timestamp are public. The
+contract does not store reports, wallet history, tax figures, names, or personal
+information. A deterministic hash can still be linkable if somebody already
+has the underlying report, so the report should remain private.
+
 ## Result states
 
 The UI distinguishes:
@@ -157,12 +182,13 @@ the request.
 | On-chain data | GoldRush by Covalent | Ethereum transaction history |
 | Historical prices | CoinGecko | Optional supported swap/date INR evidence |
 | Accounting | TypeScript + `BigInt` | Rules, FIFO, and tax arithmetic |
+| Optional receipt | Solidity + viem | Hash-only Base Sepolia proof |
 | Unit/API tests | Vitest | Schemas, providers, evidence, and reconciliation |
 | Browser tests | Playwright | Core user flow and failure states |
 | Deployment | Vercel | Public hackathon deployment |
 
-The optional Base Sepolia report receipt is not implemented. It remains blocked
-until every mandatory core release gate passes.
+No receipt contract is deployed by this repository. The feature remains
+unavailable until a public address is deliberately configured.
 
 ## Project structure
 
@@ -176,6 +202,7 @@ src/
     address-analyzer.tsx
     analysis-results.tsx
     evidence-review.tsx
+    report-receipt-panel.tsx
   lib/
     asset-registry.ts
     coingecko.ts
@@ -183,8 +210,14 @@ src/
     goldrush.ts
     opening-lot-csv.ts
     reconciliation.ts
+    report-receipt.ts
     schemas.ts
     tax-report.ts
+contracts/
+  ReportReceipt.sol
+  ReportReceipt.t.sol
+scripts/
+  deploy-report-receipt.ts
 tests/
   e2e/
   fixtures/
@@ -195,7 +228,7 @@ docs/codex-runs/
 
 Requirements:
 
-- Node.js 20 or newer;
+- Node.js 22.13 or newer;
 - a GoldRush API key for live wallet history; and
 - an optional CoinGecko API key for supported historical swap prices.
 
@@ -206,6 +239,7 @@ Create `.env.local` from `.env.example` and set server-only variables:
 ```text
 GOLDRUSH_API_KEY=
 COINGECKO_API_KEY=
+NEXT_PUBLIC_BASE_SEPOLIA_REPORT_RECEIPT_ADDRESS=
 ```
 
 Never add `NEXT_PUBLIC_` to provider secrets.
@@ -226,7 +260,10 @@ npm run lint
 npm run typecheck
 npm test
 npm run build
+npm run contract:compile
+npm run contract:test
 npm run test:e2e
+npm run test:e2e:receipt
 ```
 
 Required behavior includes:
@@ -252,6 +289,10 @@ Required behavior includes:
 - Raw wallet histories, provider secrets, and reports are not logged.
 - Token metadata is treated as untrusted input.
 - The application never requests a private key or seed phrase.
+- The optional browser-wallet flow sends only the canonical report hash to the
+  configured Base Sepolia contract.
+- The contract prevents zero hashes and duplicate hashes and stores only owner
+  and timestamp metadata.
 - Missing financial evidence is excluded rather than guessed.
 - The original opening-lot CSV is not stored.
 
@@ -264,6 +305,10 @@ CoinGecko may also be unavailable or rate-limited.
 
 The in-memory request budget is per server instance, which is suitable for the
 hackathon demo but is not a distributed production rate limiter.
+
+The Base Sepolia receipt is not a privacy guarantee, ownership proof, tax
+attestation, or mainnet record. Browser wallets and testnet RPC access may be
+unavailable, and duplicate prevention is global for each canonical report hash.
 
 ## Public links
 
@@ -285,9 +330,8 @@ returns key values.
 - [x] No application secrets exposed.
 - [x] Current release `d1b6932` is deployed to Vercel Production.
 - [x] Known active wallet reverified on that deployment.
-
-Do not start optional blockchain receipt work until all unchecked core gates
-pass.
+- [x] Optional Day 8 receipt implementation remains disabled until a contract
+  address is reviewed and configured.
 
 ## License
 

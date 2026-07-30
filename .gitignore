@@ -22,6 +22,10 @@
 # production
 /build
 
+# solidity tooling
+/artifacts
+/cache
+
 # misc
 .DS_Store
 *.pem

@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-import demoLedger from "../../src/fixtures/demo-ledger.json";
+import demoLedger from "../../src/fixtures/demo-ledger.json" with {
+  type: "json",
+};
 
 const address = "0x1234567890abcdef1234567890abcdef12345678";
 const liveTransaction = demoLedger.transactions[0];
@@ -153,6 +155,20 @@ test("renders the complete evidence-first fixture result and evidence export", a
   await expect(
     page.getByRole("heading", { name: "Items needing evidence" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "Optional Base Sepolia report receipt",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Unavailable until a reviewed public contract address is explicitly configured.",
+      { exact: false },
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Connect wallet and review hash" }),
+  ).toHaveCount(0);
 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download JSON evidence" }).click();

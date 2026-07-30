@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 
 import { EvidenceReview } from "@/components/evidence-review";
@@ -16,6 +17,38 @@ import {
   type TaxReport,
   type TransactionEvidence,
 } from "@/lib/schemas";
+
+const ReportReceiptPanel = dynamic(
+  () =>
+    import("@/components/report-receipt-panel").then(
+      (module) => module.ReportReceiptPanel,
+    ),
+  {
+    loading: () => (
+      <div className="rounded-2xl border border-slate-700 p-5 text-sm text-slate-400">
+        Loading optional receipt controls…
+      </div>
+    ),
+  },
+);
+
+function UnavailableReceiptPanel() {
+  return (
+    <section
+      className="rounded-2xl border border-slate-600 bg-slate-950/55 p-5"
+      aria-labelledby="receipt-heading"
+    >
+      <h3 id="receipt-heading" className="text-lg font-semibold text-white">
+        Optional Base Sepolia report receipt
+      </h3>
+      <p className="mt-2 text-sm leading-6 text-slate-300">
+        Unavailable until a reviewed public contract address is explicitly
+        configured. The reconciliation report remains fully usable without
+        this feature.
+      </p>
+    </section>
+  );
+}
 
 type ReportText = AnalysisReportSuccess["data"]["report"];
 type DeterministicSummary =
@@ -270,10 +303,12 @@ export function fixtureResultsViewModel(fixture: TaxReport): ResultsViewModel {
 
 export function AnalysisResults({
   result,
+  receiptContractAddress,
   isReanalyzing = false,
   onResolveEvidence,
 }: {
   result: ResultsViewModel;
+  receiptContractAddress: string | null;
   isReanalyzing?: boolean;
   onResolveEvidence?: (evidence: TransactionEvidence) => void;
 }) {
@@ -364,6 +399,16 @@ export function AnalysisResults({
           </p>
         ) : null}
       </div>
+
+      {receiptContractAddress ? (
+        <ReportReceiptPanel
+          key={`${result.source}:${result.address}:${result.generatedAt}`}
+          contractAddress={receiptContractAddress}
+          report={result}
+        />
+      ) : (
+        <UnavailableReceiptPanel />
+      )}
 
       <section
         className="rounded-2xl border border-white/10 bg-slate-950/55 p-5"

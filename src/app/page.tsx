@@ -1,6 +1,11 @@
 import { AddressAnalyzer } from "@/components/address-analyzer";
+import { configuredReportReceiptAddress } from "@/lib/report-receipt-config";
 
 export default function Home() {
+  const receiptContractAddress = configuredReportReceiptAddress(
+    process.env.NEXT_PUBLIC_BASE_SEPOLIA_REPORT_RECEIPT_ADDRESS,
+  );
+
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#17304e,_#06111f_48rem)] px-5 py-8 text-slate-100 sm:px-8 sm:py-12">
       <div className="mx-auto max-w-6xl">
@@ -19,7 +24,9 @@ export default function Home() {
         </header>
 
         <section className="py-10">
-          <AddressAnalyzer />
+          <AddressAnalyzer
+            receiptContractAddress={receiptContractAddress}
+          />
         </section>
 
         <aside
