@@ -127,6 +127,9 @@ test("renders the complete evidence-first fixture result and evidence export", a
       name: "Crypto tax reconciliation, with the evidence left visible.",
     }),
   ).toBeVisible();
+  await expect(
+    page.getByText("Final release candidate", { exact: false }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Load static demo ledger" }).click();
 

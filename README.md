@@ -328,7 +328,9 @@ returns key values.
 - [x] Deterministic classification and arithmetic with no OpenAI dependency.
 - [x] Evidence-driven recalculation and clear incomplete states.
 - [x] No application secrets exposed.
-- [x] Current release `d1b6932` is deployed to Vercel Production.
+- [x] GitHub `main` and Vercel Production were verified on the same source
+  revision; see the latest file in `docs/codex-runs/` for the exact full SHA
+  and deployment ID.
 - [x] Known active wallet reverified on that deployment.
 - [x] Optional Day 8 receipt implementation remains disabled until a contract
   address is reviewed and configured.

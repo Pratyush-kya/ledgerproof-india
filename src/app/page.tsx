@@ -19,7 +19,7 @@ export default function Home() {
             </h1>
           </div>
           <p className="max-w-xs text-sm leading-6 text-slate-300">
-            Day 7 release candidate · Ethereum-only · evidence before conclusions.
+            Final release candidate · Ethereum-only · evidence before conclusions.
           </p>
         </header>
 
