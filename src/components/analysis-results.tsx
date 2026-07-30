@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { EvidenceReview } from "@/components/evidence-review";
@@ -391,6 +392,12 @@ export function AnalysisResults({
             >
               Download JSON evidence
             </button>
+            <Link
+              href="/faq"
+              className="text-sm font-semibold text-cyan-200 underline decoration-cyan-300/40 underline-offset-4 transition hover:text-cyan-100 focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200"
+            >
+              FAQ &amp; Help
+            </Link>
           </div>
         </div>
         {exportMessage ? (
@@ -803,6 +810,12 @@ export function AnalysisResults({
             ) : null}
           </>
         )}
+        <Link
+          href="/feedback?from=%2F&source=needs-review"
+          className="mt-4 inline-flex min-h-10 items-center rounded-lg border border-amber-200/40 px-3 text-sm font-semibold text-amber-50 transition hover:bg-amber-200/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-100"
+        >
+          Report a classification or report issue
+        </Link>
       </section>
     </section>
   );

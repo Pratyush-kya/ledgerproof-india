@@ -7,7 +7,7 @@ export default function Home() {
   );
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#17304e,_#06111f_48rem)] px-5 py-8 text-slate-100 sm:px-8 sm:py-12">
+    <main className="flex-1 bg-[radial-gradient(circle_at_top,_#17304e,_#06111f_48rem)] px-5 py-8 text-slate-100 sm:px-8 sm:py-12">
       <div className="mx-auto max-w-6xl">
         <header className="flex flex-col gap-5 border-b border-slate-700/70 pb-8 sm:flex-row sm:items-end sm:justify-between">
           <div>

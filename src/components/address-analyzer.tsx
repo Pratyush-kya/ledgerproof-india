@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import {
@@ -523,6 +524,14 @@ function FlowFeedback({ flow }: { flow: FlowState }) {
         <p className="mt-1 text-xs text-rose-100/80">
           This error is retryable. Submit again after a short wait.
         </p>
+      ) : null}
+      {isError ? (
+        <Link
+          href="/feedback?from=%2F&source=analysis-error"
+          className="mt-3 inline-flex min-h-10 items-center rounded-lg border border-rose-200/40 px-3 text-sm font-semibold text-rose-50 transition hover:bg-rose-200/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-100"
+        >
+          Report this issue
+        </Link>
       ) : null}
     </div>
   );

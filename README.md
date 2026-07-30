@@ -34,6 +34,8 @@ The public, no-login application supports:
   valid supported movements;
 - precise complete, partial, blocked, no-disposal, and genuine-zero states;
 - a labelled static demo ledger;
+- a searchable, beginner-friendly FAQ;
+- a privacy-minimized feedback relay with a safe email fallback;
 - JSON evidence export, including quarantined and unsafe unsupported movements;
   and
 - an optional, disabled-by-default Base Sepolia hash receipt after a report is
@@ -240,9 +242,13 @@ Create `.env.local` from `.env.example` and set server-only variables:
 GOLDRUSH_API_KEY=
 COINGECKO_API_KEY=
 NEXT_PUBLIC_BASE_SEPOLIA_REPORT_RECEIPT_ADDRESS=
+FEEDBACK_FORM_ENDPOINT=
+NEXT_PUBLIC_SUPPORT_EMAIL=
 ```
 
-Never add `NEXT_PUBLIC_` to provider secrets.
+`FEEDBACK_FORM_ENDPOINT` must be a server-only HTTPS endpoint. Only the support
+email and optional public receipt address use `NEXT_PUBLIC_`; never add that
+prefix to provider secrets.
 
 Install and run:
 
@@ -284,6 +290,9 @@ Required behavior includes:
 ## Security and privacy
 
 - Provider keys are server-only and are never returned by `/api/health`.
+- Feedback is forwarded server-side only when `FEEDBACK_FORM_ENDPOINT` is
+  configured. It never automatically attaches a wallet address, transaction
+  history, report, or CSV.
 - Public API bodies and per-instance request counts are bounded for a hackathon
   deployment.
 - Raw wallet histories, provider secrets, and reports are not logged.
