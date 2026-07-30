@@ -18,9 +18,6 @@ export default function Home() {
               Crypto tax reconciliation, with the evidence left visible.
             </h1>
           </div>
-          <p className="max-w-xs text-sm leading-6 text-slate-300">
-            Final release candidate · Ethereum-only · evidence before conclusions.
-          </p>
         </header>
 
         <section className="py-10">

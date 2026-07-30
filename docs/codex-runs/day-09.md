@@ -391,8 +391,7 @@ did not enter supported-asset arithmetic.
 These files are deliberately uncommitted:
 
 1. `src/app/page.tsx`
-   - changed visible `Day 7 release candidate` copy to
-     `Final release candidate`;
+   - removed the outdated visible release-candidate line entirely;
 2. `README.md`
    - removed the obsolete hard-coded `d1b6932` deployment claim and directs
      exact SHA/deployment evidence to the latest Codex run;

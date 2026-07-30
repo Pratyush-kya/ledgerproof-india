@@ -128,8 +128,8 @@ test("renders the complete evidence-first fixture result and evidence export", a
     }),
   ).toBeVisible();
   await expect(
-    page.getByText("Final release candidate", { exact: false }),
-  ).toBeVisible();
+    page.getByText("release candidate", { exact: false }),
+  ).toHaveCount(0);
 
   await page.getByRole("button", { name: "Load static demo ledger" }).click();
 
