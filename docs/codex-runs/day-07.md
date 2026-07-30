@@ -85,11 +85,19 @@ Before recording the provider-enhanced final demo:
       pass.
 - [x] README names the real repository and production URL.
 - [x] GitHub and Vercel identify the same deployed commit.
-- [ ] A known active wallet completes on the public deployment from a normal
+- [x] A known active wallet completes on the public deployment from a normal
       internet connection.
+      Evidence captured 30 July 2026: public address
+      `0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045` loaded and reconciled 50
+      validated Ethereum transactions as `LIVE PROVIDER DATA`. All 50 records
+      requiring missing or ambiguous evidence were visibly excluded or marked
+      for review; deterministic figures were not guessed. OpenAI remained on
+      `RULE FALLBACK`, which is an accepted safe core-flow state and is not
+      evidence of provider-enhanced classification.
 - [ ] The final demo video shows the same commit that is deployed.
 
-The unchecked items block Day 8 receipt work.
+The remaining unchecked video/deployment-consistency item blocks Day 8 receipt
+work.
 
 ## Inferred core story
 
@@ -244,5 +252,6 @@ normal runner cleanup on the builder's machine.
 
 ### Decision
 
-**Core code gate: pass. Production live-wallet gate: pending one manual
-verification. Day 8 receipt work remains blocked until that check passes.**
+**Core code gate: pass. Production live-wallet gate: pass. Final
+video/deployment-consistency gate: pending. Day 8 receipt work remains blocked
+until that check passes.**
