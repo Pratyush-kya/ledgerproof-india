@@ -5,7 +5,6 @@ import { resetRequestGuardsForTests } from "../src/lib/request-guard";
 import type { NormalizedTransaction } from "../src/lib/schemas";
 
 const TX_HASH = `0x${"d".repeat(64)}`;
-const originalOpenAiKey = process.env.OPENAI_API_KEY;
 
 const transaction: NormalizedTransaction = {
   id: "transfer-1",
@@ -43,30 +42,30 @@ function request() {
 
 afterEach(() => {
   resetRequestGuardsForTests();
-  if (originalOpenAiKey === undefined) {
-    delete process.env.OPENAI_API_KEY;
-  } else {
-    process.env.OPENAI_API_KEY = originalOpenAiKey;
-  }
 });
 
 describe("POST /api/analysis/report", () => {
-  it("reports that figures were not calculated for a one-sided transfer", async () => {
-    delete process.env.OPENAI_API_KEY;
+  it("distinguishes no supported disposal from a calculation failure", async () => {
     const response = await POST(request());
     const payload = await response.json();
 
     expect(response.status).toBe(200);
     expect(payload.data.calculation.summary.calculatedDisposals).toBe(0);
+    expect(payload.data.calculation.summary.calculationStatus).toBe(
+      "no_supported_disposals",
+    );
     expect(payload.data.report.deterministicFindings[0]).toContain(
-      "Not calculated",
+      "No supported disposals",
+    );
+    expect(payload.data.classificationMode).toBe("deterministic");
+    expect(payload.data.classificationNotice).toBe(
+      "DETERMINISTIC RULE ENGINE — tax calculations do not depend on AI.",
     );
   });
 
   it("enforces the per-client report request budget", async () => {
-    delete process.env.OPENAI_API_KEY;
     let response = await POST(request());
-    for (let index = 1; index < 11; index += 1) {
+    for (let index = 1; index < 31; index += 1) {
       response = await POST(request());
     }
 

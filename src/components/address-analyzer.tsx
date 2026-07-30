@@ -10,11 +10,20 @@ import {
 } from "@/components/analysis-results";
 import { DEMO_LEDGER } from "@/lib/demo-ledger";
 import {
-  AnalysisReportSuccessSchema,
+  currentFinancialYear,
+  financialYearBounds,
+  recentFinancialYears,
+} from "@/lib/financial-year";
+import { parseOpeningLotCsv } from "@/lib/opening-lot-csv";
+import {
   AnalysisReportErrorSchema,
+  AnalysisReportSuccessSchema,
   EvmAddressSchema,
   FetchApiErrorSchema,
   FetchTransactionsSuccessSchema,
+  type FetchTransactionsResult,
+  type OpeningLot,
+  type TransactionEvidence,
 } from "@/lib/schemas";
 
 type FlowState =
@@ -30,8 +39,9 @@ type FlowState =
     }
   | { status: "success"; message: string };
 
-const REQUEST_TIMEOUT_MS = 15_000;
+const REQUEST_TIMEOUT_MS = 45_000;
 const demoAddress = DEMO_LEDGER.coverage.address;
+const financialYears = recentFinancialYears(6);
 
 async function fetchWithTimeout(url: string, init: RequestInit) {
   const controller = new AbortController();
@@ -51,12 +61,94 @@ function isTimeoutError(error: unknown) {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
+function replaceEvidence(
+  current: TransactionEvidence[],
+  next: TransactionEvidence,
+) {
+  return [
+    ...current.filter(
+      (item) => item.txHash.toLowerCase() !== next.txHash.toLowerCase(),
+    ),
+    next,
+  ];
+}
+
 export function AddressAnalyzer() {
   const [address, setAddress] = useState("");
+  const [financialYear, setFinancialYear] = useState(currentFinancialYear);
   const [flow, setFlow] = useState<FlowState>({ status: "idle" });
   const [result, setResult] = useState<ResultsViewModel | null>(null);
+  const [fetchResult, setFetchResult] =
+    useState<FetchTransactionsResult | null>(null);
+  const [evidence, setEvidence] = useState<TransactionEvidence[]>([]);
+  const [openingLots, setOpeningLots] = useState<OpeningLot[]>([]);
+  const [csvMessage, setCsvMessage] = useState<string | null>(null);
 
-  const isLoading = flow.status === "fetching" || flow.status === "analyzing";
+  const isLoading =
+    flow.status === "fetching" || flow.status === "analyzing";
+
+  async function runAnalysis({
+    fetched,
+    nextEvidence,
+    nextOpeningLots,
+    message,
+  }: {
+    fetched: FetchTransactionsResult;
+    nextEvidence: TransactionEvidence[];
+    nextOpeningLots: OpeningLot[];
+    message: string;
+  }) {
+    setFlow({ status: "analyzing", message });
+
+    const analysisResponse = await fetchWithTimeout("/api/analysis/report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        transactions: fetched.transactions,
+        evidence: nextEvidence,
+        openingLots: nextOpeningLots,
+        historyComplete: fetched.historyComplete,
+        calculationPeriod: fetched.financialYear
+          ? financialYearBounds(fetched.financialYear)
+          : undefined,
+      }),
+    });
+    const analysisPayload: unknown = await analysisResponse.json();
+    const parsedAnalysis =
+      AnalysisReportSuccessSchema.safeParse(analysisPayload);
+
+    if (!analysisResponse.ok || !parsedAnalysis.success) {
+      const parsedAnalysisError =
+        AnalysisReportErrorSchema.safeParse(analysisPayload);
+      setFlow({
+        status: "error",
+        title:
+          parsedAnalysisError.success &&
+          parsedAnalysisError.data.error.code === "RATE_LIMITED"
+            ? "Analysis rate limit reached"
+            : "Reconciliation report unavailable",
+        message: parsedAnalysisError.success
+          ? parsedAnalysisError.data.error.message
+          : "The validated report could not be produced. The previous result, if any, remains visible.",
+        retryable: true,
+      });
+      return false;
+    }
+
+    setResult(
+      liveResultsViewModel(
+        fetched,
+        parsedAnalysis.data.data,
+        nextEvidence,
+        nextOpeningLots,
+      ),
+    );
+    setFlow({
+      status: "success",
+      message: `Reconciled ${fetched.transactions.length} validated transaction${fetched.transactions.length === 1 ? "" : "s"} with ${nextEvidence.length} user evidence record${nextEvidence.length === 1 ? "" : "s"} and ${nextOpeningLots.length} opening lot${nextOpeningLots.length === 1 ? "" : "s"}.`,
+    });
+    return true;
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -76,22 +168,28 @@ export function AddressAnalyzer() {
     }
 
     setResult(null);
+    setFetchResult(null);
+    setEvidence([]);
+    setOpeningLots([]);
+    setCsvMessage(null);
     setFlow({
       status: "fetching",
-      message: "Fetching and validating recent Ethereum history…",
+      message: `Fetching paginated Ethereum history for FY ${financialYear}…`,
     });
 
     try {
       const response = await fetchWithTimeout("/api/analysis/fetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address: validation.data }),
+        body: JSON.stringify({
+          address: validation.data,
+          financialYear,
+        }),
       });
       const payload: unknown = await response.json();
 
       if (!response.ok) {
         const parsedError = FetchApiErrorSchema.safeParse(payload);
-
         if (parsedError.success) {
           const isRateLimit =
             parsedError.data.error.code === "UPSTREAM_RATE_LIMIT" ||
@@ -133,55 +231,19 @@ export function AddressAnalyzer() {
       if (parsedResult.data.data.isEmpty) {
         setFlow({
           status: "empty",
-          message:
-            "No recent Ethereum transactions were returned for this address. Try another public address or inspect the static demo.",
+          message: `No Ethereum transactions were returned for FY ${financialYear}. Try another financial year, another public address, or the static demo.`,
         });
         return;
       }
 
-      setFlow({
-        status: "analyzing",
+      const fetched = parsedResult.data.data;
+      setFetchResult(fetched);
+      await runAnalysis({
+        fetched,
+        nextEvidence: [],
+        nextOpeningLots: [],
         message:
-          "Running deterministic FIFO reconciliation and validating classification evidence…",
-      });
-      const analysisResponse = await fetchWithTimeout("/api/analysis/report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transactions: parsedResult.data.data.transactions,
-        }),
-      });
-      const analysisPayload: unknown = await analysisResponse.json();
-      const parsedAnalysis =
-        AnalysisReportSuccessSchema.safeParse(analysisPayload);
-
-      if (!analysisResponse.ok || !parsedAnalysis.success) {
-        const parsedAnalysisError =
-          AnalysisReportErrorSchema.safeParse(analysisPayload);
-        setFlow({
-          status: "error",
-          title:
-            parsedAnalysisError.success &&
-            parsedAnalysisError.data.error.code === "RATE_LIMITED"
-              ? "Analysis rate limit reached"
-              : "Reconciliation report unavailable",
-          message: parsedAnalysisError.success
-            ? parsedAnalysisError.data.error.message
-            : "Transactions loaded, but the validated report could not be produced. No partial figures are shown.",
-          retryable: true,
-        });
-        return;
-      }
-
-      setResult(
-        liveResultsViewModel(
-          parsedResult.data.data,
-          parsedAnalysis.data.data,
-        ),
-      );
-      setFlow({
-        status: "success",
-        message: `Loaded and reconciled ${parsedResult.data.data.transactions.length} validated Ethereum transaction${parsedResult.data.data.transactions.length === 1 ? "" : "s"}.`,
+          "Running deterministic FIFO reconciliation and evidence checks…",
       });
     } catch (error) {
       setFlow({
@@ -190,9 +252,82 @@ export function AddressAnalyzer() {
           ? "Analysis timed out"
           : "Could not reach the analysis service",
         message: isTimeoutError(error)
-          ? "The request exceeded 15 seconds and was stopped. No partial result is shown."
+          ? "The request exceeded 45 seconds and was stopped. No partial result is shown."
           : "Check your connection and retry. You can still inspect the offline demo.",
         retryable: true,
+      });
+    }
+  }
+
+  async function handleResolveEvidence(next: TransactionEvidence) {
+    if (!fetchResult) {
+      return;
+    }
+    const nextEvidence = replaceEvidence(evidence, next);
+
+    try {
+      const completed = await runAnalysis({
+        fetched: fetchResult,
+        nextEvidence,
+        nextOpeningLots: openingLots,
+        message: "Applying evidence and rerunning deterministic FIFO…",
+      });
+      if (completed) {
+        setEvidence(nextEvidence);
+      }
+    } catch (error) {
+      setFlow({
+        status: "error",
+        title: isTimeoutError(error)
+          ? "Recalculation timed out"
+          : "Evidence could not be applied",
+        message: isTimeoutError(error)
+          ? "The request exceeded 45 seconds. The previous result remains visible."
+          : "The evidence was not saved. Check the value and retry.",
+        retryable: true,
+      });
+    }
+  }
+
+  async function handleOpeningLots(
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    try {
+      const nextOpeningLots = parseOpeningLotCsv(await file.text());
+      setCsvMessage(
+        `${nextOpeningLots.length} opening FIFO lot${nextOpeningLots.length === 1 ? "" : "s"} validated locally. The file is not uploaded or stored.`,
+      );
+
+      if (!fetchResult) {
+        setOpeningLots(nextOpeningLots);
+        return;
+      }
+
+      const completed = await runAnalysis({
+        fetched: fetchResult,
+        nextEvidence: evidence,
+        nextOpeningLots,
+        message: "Applying opening lots and rerunning deterministic FIFO…",
+      });
+      if (completed) {
+        setOpeningLots(nextOpeningLots);
+      }
+    } catch (error) {
+      setCsvMessage(null);
+      setFlow({
+        status: "error",
+        title: "Opening-lot CSV rejected",
+        message:
+          error instanceof Error
+            ? error.message
+            : "The CSV could not be validated.",
+        retryable: false,
       });
     }
   }
@@ -200,6 +335,10 @@ export function AddressAnalyzer() {
   function loadDemo() {
     setAddress(demoAddress);
     setResult(fixtureResultsViewModel(DEMO_LEDGER));
+    setFetchResult(null);
+    setEvidence([]);
+    setOpeningLots([]);
+    setCsvMessage(null);
     setFlow({
       status: "success",
       message:
@@ -216,36 +355,50 @@ export function AddressAnalyzer() {
         <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">
           Start with a public wallet address
         </h2>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-          Fetch up to 50 recent Ethereum transactions through the server, or
-          load the clearly labelled offline fixture. No wallet connection,
-          private key, or seed phrase is needed.
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
+          Select an Indian financial year and fetch paginated Ethereum history
+          through the server. The public demo cap is 250 validated records. No
+          wallet connection, private key, seed phrase, or AI subscription is
+          required.
         </p>
 
         <form className="mt-7" onSubmit={handleSubmit} noValidate>
-          <label
-            className="block text-sm font-medium text-slate-100"
-            htmlFor="wallet-address"
-          >
-            Ethereum wallet address
-          </label>
-          <input
-            id="wallet-address"
-            name="wallet-address"
-            value={address}
-            onChange={(event) => setAddress(event.target.value)}
-            placeholder="0x…"
-            spellCheck={false}
-            autoCapitalize="off"
-            className="mt-2 min-h-12 w-full rounded-xl border border-slate-600 bg-slate-900 px-4 font-mono text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-300/30"
-            aria-describedby="address-help flow-status"
-            aria-invalid={
-              flow.status === "error" &&
-              flow.title === "Check the wallet address"
-                ? true
-                : undefined
-            }
-          />
+          <div className="grid gap-4 md:grid-cols-[1fr_14rem]">
+            <label className="text-sm font-medium text-slate-100">
+              Ethereum wallet address
+              <input
+                id="wallet-address"
+                name="wallet-address"
+                value={address}
+                onChange={(event) => setAddress(event.target.value)}
+                placeholder="0x…"
+                spellCheck={false}
+                autoCapitalize="off"
+                className="mt-2 min-h-12 w-full rounded-xl border border-slate-600 bg-slate-900 px-4 font-mono text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-300/30"
+                aria-describedby="address-help flow-status"
+                aria-invalid={
+                  flow.status === "error" &&
+                  flow.title === "Check the wallet address"
+                    ? true
+                    : undefined
+                }
+              />
+            </label>
+            <label className="text-sm font-medium text-slate-100">
+              Financial year
+              <select
+                value={financialYear}
+                onChange={(event) => setFinancialYear(event.target.value)}
+                className="mt-2 min-h-12 w-full rounded-xl border border-slate-600 bg-slate-900 px-4 text-sm text-white"
+              >
+                {financialYears.map((year) => (
+                  <option key={year} value={year}>
+                    FY {year}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <p id="address-help" className="mt-2 text-xs leading-5 text-slate-400">
             Use a public 42-character EVM address. Never enter a seed phrase or
             private key.
@@ -273,13 +426,50 @@ export function AddressAnalyzer() {
           </div>
         </form>
 
+        <div className="mt-6 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+          <label
+            htmlFor="opening-lots"
+            className="block text-sm font-semibold text-slate-100"
+          >
+            Optional opening FIFO lots CSV
+          </label>
+          <p className="mt-1 text-xs leading-5 text-slate-400">
+            Use this when complete acquisition history is unavailable. Exact
+            header: asset,quantity,acquired_at,cost_basis_inr,transaction_hash.
+            The browser validates the file locally and sends only structured
+            lots for this calculation.
+          </p>
+          <input
+            id="opening-lots"
+            type="file"
+            accept=".csv,text/csv"
+            disabled={isLoading || !fetchResult}
+            onChange={handleOpeningLots}
+            className="mt-3 block w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-700 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
+          />
+          {!fetchResult ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Analyze a live wallet first, then attach opening lots to that
+              report.
+            </p>
+          ) : null}
+          {csvMessage ? (
+            <p className="mt-2 text-xs text-emerald-200" role="status">
+              {csvMessage}
+            </p>
+          ) : null}
+        </div>
+
         <FlowFeedback flow={flow} />
       </div>
 
       {result ? (
         <AnalysisResults
-          key={`${result.source}-${result.generatedAt}`}
           result={result}
+          isReanalyzing={flow.status === "analyzing"}
+          onResolveEvidence={
+            result.source === "live" ? handleResolveEvidence : undefined
+          }
         />
       ) : null}
     </section>
@@ -292,7 +482,8 @@ function FlowFeedback({ flow }: { flow: FlowState }) {
   }
 
   const isError = flow.status === "error";
-  const isLoading = flow.status === "fetching" || flow.status === "analyzing";
+  const isLoading =
+    flow.status === "fetching" || flow.status === "analyzing";
 
   return (
     <div
@@ -316,12 +507,16 @@ function FlowFeedback({ flow }: { flow: FlowState }) {
       {isError ? (
         <p className="text-sm font-semibold text-rose-100">{flow.title}</p>
       ) : null}
-      <p className={`text-sm leading-6 ${isError ? "text-rose-50" : "text-slate-200"}`}>
+      <p
+        className={`text-sm leading-6 ${
+          isError ? "text-rose-50" : "text-slate-200"
+        }`}
+      >
         {flow.message}
       </p>
       {isError && flow.retryable ? (
         <p className="mt-1 text-xs text-rose-100/80">
-          This error is retryable. Submit the address again after a short wait.
+          This error is retryable. Submit again after a short wait.
         </p>
       ) : null}
     </div>

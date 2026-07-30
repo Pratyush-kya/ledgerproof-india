@@ -30,7 +30,7 @@ export default function Home() {
               <h2 className="text-lg font-semibold text-white">What the result proves</h2>
               <ol className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
                 <li><span className="mr-2 font-mono text-cyan-300">01</span>Shows exactly which records were covered.</li>
-                <li><span className="mr-2 font-mono text-cyan-300">02</span>Separates model classification from deterministic arithmetic.</li>
+                <li><span className="mr-2 font-mono text-cyan-300">02</span>Runs classification and arithmetic through deterministic rules.</li>
                 <li><span className="mr-2 font-mono text-cyan-300">03</span>Keeps unknowns, FIFO evidence, and limitations visible.</li>
               </ol>
             </div>

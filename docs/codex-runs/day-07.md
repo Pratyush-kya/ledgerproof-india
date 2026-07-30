@@ -2,6 +2,125 @@
 
 Date: 2026-07-29
 
+## 30 July deterministic remediation (supersedes provider-classification notes below)
+
+This section records the approved, uncommitted remediation performed on
+30 July 2026. Earlier sections remain as historical evidence for the previously
+deployed commit; references below to OpenAI, `RULE FALLBACK`, a 50-record cap,
+or a cosmetic correction dropdown no longer describe the current local
+worktree.
+
+### Decision and product boundary
+
+- Removed the OpenAI classification integration, model configuration, schemas,
+  and tests.
+- The application now states:
+  `DETERMINISTIC RULE ENGINE — tax calculations do not depend on AI.`
+- Classification, FIFO matching, INR paise conversion, gains, losses, and the
+  limited 30% preview are deterministic.
+- CoinGecko remains optional and can add historical INR evidence only for a
+  validated, two-sided supported swap.
+- Actual exchange/CSV INR values remain required for buys and sells. A market
+  price is never substituted for actual purchase cost.
+- FIFO is explicitly labelled as LedgerProof's accounting assumption, not as a
+  method mandated by Indian law.
+- The tax-preview wording links to the official
+  [Income Tax Act Section 115BBH](https://www.incometaxindia.gov.in/w/section-115bbh-4)
+  and preserves the educational/not-tax-advice boundary.
+
+### Implemented remediation
+
+1. **Unsupported-token quarantine**
+   - Unsupported inbound tokens with no wallet outflow are quarantined as
+     possible spam.
+   - Supported movements in the same transaction continue through the
+     deterministic engine.
+   - Unsupported wallet outflows, and unsupported inbound tokens accompanying
+     a supported outflow, remain in review.
+   - Contract address, decimals, and standard are validated; symbols are not
+     trusted.
+   - Quarantined and unsafe movements remain in the JSON evidence export.
+2. **Evidence-driven recalculation**
+   - Removed the display-only category correction dropdown.
+   - The UI now shows only transactions requiring user evidence.
+   - Supported choices include INR purchase, INR sale, self-transfer,
+     gift/reward/airdrop, and unknown/keep excluded.
+   - Rupees are converted to integer paise before submitting structured
+     evidence to `/api/analysis/report`.
+   - The deterministic engine reruns and immediately replaces FIFO lots,
+     classifications, coverage, and tax figures.
+   - A user-selected excluded treatment leaves the item in the evidence export
+     but no longer traps it in the unresolved queue.
+3. **Financial-year and history coverage**
+   - Added Indian financial-year selection.
+   - GoldRush pagination follows only validated same-origin links and fetches
+     earlier acquisition context until provider history ends or the 250-record
+     demo cap is reached.
+   - Reports expose `Complete history: Yes/No`; reaching a cap never silently
+     claims complete coverage.
+   - Added an optional opening FIFO lot CSV with exact headers:
+     `asset,quantity,acquired_at,cost_basis_inr,transaction_hash`.
+   - CSV parsing is local to the browser; the original file is not stored.
+4. **Truthful result states and coverage**
+   - Added distinct no-disposal, missing-basis, missing-valuation, partial,
+     complete, and genuine-zero states.
+   - Replaced misleading `0 included`/`Latest 50` cards with records fetched,
+     supported movements, calculated disposals, needs user evidence,
+     quarantined movements, and complete-history status.
+5. **Hackathon request safety**
+   - Fetch requests remain limited to 20 per minute per server instance.
+   - Analysis/recalculation requests are limited to 30 per minute per server
+     instance so the evidence workflow is usable without becoming unbounded.
+   - Fetch bodies are capped at 4 KiB; report bodies are capped at 2 MiB and
+     schemas cap transactions/evidence/opening lots at 250.
+
+### Concrete local verification
+
+- `npm run lint` — passed.
+- `npm run typecheck` — passed.
+- `npm test` — 10 files and 55 tests passed.
+- `npm run build` — passed with Next.js 16.2.11; `/` prerendered and all three
+  API routes built as dynamic server routes.
+- `npm run test:e2e` — all 6 Playwright tests passed in 21.3 seconds when run
+  against the controlled local server:
+  1. static demo and JSON evidence export;
+  2. actionable provider rate-limit state;
+  3. INR evidence submission and deterministic FIFO rerun;
+  4. explicit empty financial-year history;
+  5. unavailable-provider recovery through the static demo; and
+  6. invalid address rejected before a provider request.
+- Direct local browser inspection:
+  - landing content and financial-year control rendered;
+  - no Next.js error overlay;
+  - no browser warning/error logs;
+  - static demo rendered the six new coverage metrics;
+  - `RULE FALLBACK` was absent; and
+  - deterministic product copy was visible.
+- Regression coverage now includes spam plus supported ETH, unsafe unsupported
+  consideration, user-kept exclusions, opening FIFO sale evidence, exact CSV
+  paise conversion, Indian financial-year boundaries, and the 250-record cap.
+
+### Current gate and remaining risks
+
+- These changes are local only. Codex did not commit, push, or deploy them.
+- The currently public Vercel deployment therefore does not yet prove this
+  remediation until the builder reviews, commits, pushes, and deploys the exact
+  resulting commit.
+- A post-deployment known-active-wallet run is still required.
+- GoldRush availability, key validity, credits, and provider rate limits remain
+  external risks.
+- CoinGecko historical pricing is optional and may be incomplete or
+  unavailable; the expected behavior is a blocked/partial result, never a
+  guessed price.
+- Opening lots and INR purchase/sale amounts are user-supplied evidence and
+  must be independently verified.
+- The 250-record cap can leave history incomplete; the UI now says so.
+- The final demo video must show the same Git commit as GitHub and Vercel.
+
+**Updated decision:** local deterministic core gate passes. Deployment,
+known-active-wallet re-verification, and final video/commit consistency remain
+pending. Day 8 optional receipt work remains blocked until those gates pass.
+
 ## Final production re-verification
 
 - Re-verified local checkout, GitHub `main`, and the Vercel production

@@ -17,11 +17,7 @@ export async function GET() {
         historicalPricesConfigured: Boolean(
           process.env.COINGECKO_API_KEY?.trim(),
         ),
-        classificationConfigured: Boolean(
-          process.env.OPENAI_API_KEY?.trim(),
-        ),
-        classificationModel:
-          process.env.OPENAI_MODEL?.trim() || "gpt-5-mini",
+        classificationMode: "deterministic",
       },
     },
     {

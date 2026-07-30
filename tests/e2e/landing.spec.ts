@@ -11,93 +11,111 @@ const liveFetchResponse = {
     chainId: 1,
     source: "goldrush",
     fetchedAt: "2026-07-29T09:00:00.000Z",
+    financialYear: "2026-27",
     transactions: [liveTransaction],
     isEmpty: false,
     truncated: false,
+    historyComplete: true,
   },
 };
 
-const liveReportResponse = {
-  data: {
-    classificationMode: "rule_fallback",
-    classificationNotice:
-      "RULE FALLBACK — deterministic classifications are shown because the LLM agent is unavailable.",
-    classifications: [
-      {
-        transactionId: liveTransaction.id,
-        category: "transfer_in",
-        confidence: 0.5,
-        reason:
-          "One supported asset received without acquisition-cost evidence.",
-        evidenceTxHashes: [liveTransaction.txHash],
-        needsReview: true,
-        source: "rule",
-      },
-    ],
-    calculation: {
-      engineVersion: "0.1",
-      method: "deterministic-rules-and-fifo",
-      summary: {
-        positiveTaxableGainsInrPaisa: "0",
-        vdaLossesInrPaisa: "0",
-        estimatedBaseTax30PercentInrPaisa: "0",
-        includeCess: false,
-        estimatedCess4PercentInrPaisa: null,
-        estimatedTaxIncludingCessInrPaisa: "0",
-        calculatedDisposals: 0,
-        excludedTransactions: 1,
-        calculationStatus: "partial",
-        excludesSurcharge: true,
-        excludesTdsCredit: true,
-      },
-      limitations: [
-        "This deterministic preview is not tax advice or an ITR filing service.",
-      ],
-      remainingLots: [
-        {
-          lotId: `${liveTransaction.txHash}:eip155:1/slip44:60:0`,
-          assetId: "eip155:1/slip44:60",
-          symbol: "ETH",
-          decimals: 18,
-          quantityAtomic: "250000000000000000",
-          acquiredAt: liveTransaction.timestamp,
-          costBasisInrPaisa: null,
-          sourceTxHash: liveTransaction.txHash,
-          needsReview: true,
-        },
-      ],
-      disposals: [],
-      gasTreatments: [
+function liveReportResponse(resolved = false) {
+  return {
+    data: {
+      classificationMode: "deterministic",
+      classificationNotice:
+        "DETERMINISTIC RULE ENGINE — tax calculations do not depend on AI.",
+      classifications: [
         {
           transactionId: liveTransaction.id,
-          txHash: liveTransaction.txHash,
-          gasFeeWei: liveTransaction.gasFeeWei,
-          valueInrPaisa: null,
-          includedInCostBasis: false,
-          deductedFromProceeds: false,
-          needsReview: true,
-          reason:
-            "Gas is reported separately and is not included in basis or proceeds by this preview.",
+          category: resolved ? "buy" : "transfer_in",
+          confidence: resolved ? 1 : 0.5,
+          reason: resolved
+            ? "One supported asset received with explicit INR-paid evidence."
+            : "One supported asset received without acquisition-cost evidence.",
+          evidenceTxHashes: [liveTransaction.txHash],
+          needsReview: !resolved,
+          source: resolved ? "user" : "rule",
         },
       ],
+      calculation: {
+        engineVersion: "0.2",
+        method: "deterministic-rules-and-fifo",
+        summary: {
+          positiveTaxableGainsInrPaisa: "0",
+          vdaLossesInrPaisa: "0",
+          estimatedBaseTax30PercentInrPaisa: "0",
+          includeCess: false,
+          estimatedCess4PercentInrPaisa: null,
+          estimatedTaxIncludingCessInrPaisa: "0",
+          calculatedDisposals: 0,
+          excludedTransactions: resolved ? 0 : 1,
+          supportedAssetMovements: 1,
+          needsUserEvidence: resolved ? 0 : 1,
+          quarantinedAssetMovements: 0,
+          unsafeUnsupportedAssetMovements: 0,
+          historyComplete: true,
+          calculationPeriod: {
+            start: "2026-04-01T00:00:00.000Z",
+            endExclusive: "2027-04-01T00:00:00.000Z",
+          },
+          calculationStatus: "no_supported_disposals",
+          excludesSurcharge: true,
+          excludesTdsCredit: true,
+        },
+        limitations: [
+          "This deterministic preview is not tax advice or an ITR filing service.",
+        ],
+        remainingLots: [
+          {
+            lotId: `${liveTransaction.txHash}:eip155:1/slip44:60:0`,
+            assetId: "eip155:1/slip44:60",
+            symbol: "ETH",
+            decimals: 18,
+            quantityAtomic: "250000000000000000",
+            acquiredAt: liveTransaction.timestamp,
+            costBasisInrPaisa: resolved ? "5400000" : null,
+            sourceTxHash: liveTransaction.txHash,
+            needsReview: !resolved,
+          },
+        ],
+        disposals: [],
+        gasTreatments: [
+          {
+            transactionId: liveTransaction.id,
+            txHash: liveTransaction.txHash,
+            gasFeeWei: liveTransaction.gasFeeWei,
+            valueInrPaisa: null,
+            includedInCostBasis: false,
+            deductedFromProceeds: false,
+            needsReview: true,
+            reason:
+              "Gas is reported separately and is not included in basis or proceeds by this preview.",
+          },
+        ],
+        quarantinedAssets: [],
+        unsupportedAssetsRequiringReview: [],
+      },
+      report: {
+        title: "Deterministic crypto tax reconciliation preview",
+        overview:
+          "No supported disposals were detected in the available history.",
+        deterministicFindings: [
+          "No supported disposals were detected in the available history.",
+        ],
+        reviewWarnings: [
+          resolved
+            ? "No transaction classification currently needs user evidence."
+            : "1 transaction needs user evidence.",
+        ],
+        disclaimer:
+          "This is an educational reconciliation estimate, not tax advice or a filing-ready return.",
+      },
     },
-    report: {
-      title: "Crypto tax reconciliation preview",
-      overview:
-        "This live provider record needs review because acquisition cost evidence is unavailable.",
-      deterministicFindings: [
-        "Not calculated: no disposal had complete basis and valuation evidence.",
-      ],
-      reviewWarnings: [
-        "Confirm the acquisition cost before treating this transfer as a purchase.",
-      ],
-      disclaimer:
-        "This is an educational reconciliation estimate, not tax advice or a filing-ready return.",
-    },
-  },
-};
+  };
+}
 
-test("renders the complete evidence-first fixture result and correction audit", async ({
+test("renders the complete evidence-first fixture result and evidence export", async ({
   page,
 }) => {
   await page.goto("/");
@@ -133,16 +151,7 @@ test("renders the complete evidence-first fixture result and correction audit", 
     page.getByRole("heading", { name: "FIFO lots and disposal matches" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Excluded and unknown items" }),
-  ).toBeVisible();
-
-  const firstCorrection = page.getByLabel("Correct category").first();
-  await firstCorrection.selectOption("transfer_in");
-  await expect(page.getByText("USER CORRECTED")).toBeVisible();
-  await expect(
-    page.getByText("does not alter deterministic calculations", {
-      exact: false,
-    }),
+    page.getByRole("heading", { name: "Items needing evidence" }),
   ).toBeVisible();
 
   const downloadPromise = page.waitForEvent("download");
@@ -152,7 +161,9 @@ test("renders the complete evidence-first fixture result and correction audit", 
     /^ledgerproof-fixture-0x12345678\.json$/,
   );
   await expect(
-    page.getByText("JSON export downloaded with the correction audit trail."),
+    page.getByText(
+      "JSON evidence downloaded, including quarantined movements.",
+    ),
   ).toBeVisible();
 });
 
@@ -186,7 +197,7 @@ test("shows a visible and actionable rate-limit state", async ({ page }) => {
   ).toHaveCount(0);
 });
 
-test("completes the live-wallet UI flow with validated provider responses", async ({
+test("resolves missing INR evidence and reruns deterministic FIFO", async ({
   page,
 }) => {
   await page.route("**/api/analysis/fetch", async (route) => {
@@ -197,10 +208,15 @@ test("completes the live-wallet UI flow with validated provider responses", asyn
     });
   });
   await page.route("**/api/analysis/report", async (route) => {
+    const requestBody = route.request().postDataJSON() as {
+      evidence?: unknown[];
+    };
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(liveReportResponse),
+      body: JSON.stringify(
+        liveReportResponse(Boolean(requestBody.evidence?.length)),
+      ),
     });
   });
 
@@ -210,13 +226,28 @@ test("completes the live-wallet UI flow with validated provider responses", asyn
 
   await expect(page.getByText("LIVE PROVIDER DATA")).toBeVisible();
   await expect(page.locator("#flow-status")).toContainText(
-    "Loaded and reconciled 1 validated Ethereum transaction.",
+    "Reconciled 1 validated transaction with 0 user evidence records",
   );
   await expect(
-    page.getByRole("heading", { name: "Reconciliation review" }),
+    page.getByText("DETERMINISTIC RULE ENGINE", { exact: false }),
   ).toBeVisible();
-  await expect(page.getByText("RULE FALLBACK", { exact: false })).toBeVisible();
-  await expect(page.getByText("Needs review", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Resolve missing evidence" }),
+  ).toBeVisible();
+
+  await page.getByLabel("INR paid").fill("54000.00");
+  await page.getByRole("button", { name: "Apply and recalculate" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Evidence review complete" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("USER EVIDENCE", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator("#flow-status")).toContainText(
+    "with 1 user evidence record",
+  );
+  await expect(page.getByText("₹54,000.00")).toBeVisible();
 });
 
 test("shows an explicit empty-history state", async ({ page }) => {
@@ -239,7 +270,7 @@ test("shows an explicit empty-history state", async ({ page }) => {
   await page.getByRole("button", { name: "Analyze live wallet" }).click();
 
   await expect(page.locator("#flow-status")).toContainText(
-    "No recent Ethereum transactions were returned",
+    "No Ethereum transactions were returned for FY",
   );
   await expect(
     page.getByRole("heading", { name: "Reconciliation review" }),

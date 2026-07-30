@@ -1,260 +1,206 @@
 # LedgerProof India
 
-An evidence-first crypto tax reconciliation agent for public EVM wallets.
+An evidence-first, deterministic crypto tax reconciliation preview for public
+Ethereum wallets.
 
-LedgerProof India reads a wallet's on-chain activity, converts raw blockchain
-records into a consistent ledger, classifies each transaction, calculates a
-transparent Indian VDA tax preview, and explains the result in plain English.
+LedgerProof India fetches public wallet activity, validates supported asset
+movements, reconciles FIFO lots with exact integer arithmetic, asks for missing
+off-chain evidence, and exports a reviewable report. It does not use OpenAI or
+any other LLM. Classification and tax arithmetic use deterministic rules.
 
-> **Important:** This project provides a tax-reconciliation preview for
-> educational and review purposes. It is not tax advice, an ITR filing service,
-> or a replacement for a qualified tax professional.
+> LedgerProof India is an educational reconciliation preview. It is not tax
+> advice, an ITR filing service, or a replacement for a qualified tax
+> professional.
 
-## Hackathon
+## Current product
 
-- **Event:** ChatGPT Codex India Hackathon 2026
-- **Primary track:** Theme 4 - Domain Agents
-- **Secondary inspiration:** Theme 6 - Bharat business and ledger reconciliation
-- **Submission deadline:** 3 August 2026
-- **Current status:** Active hackathon build
+The public, no-login application supports:
 
-## Problem
+- Ethereum mainnet public addresses;
+- Indian financial-year selection;
+- paginated GoldRush history with a 250-record public-demo cap;
+- ETH, WETH, USDC, and USDT validated by contract address, decimals, and token
+  standard rather than symbol alone;
+- deterministic `buy`, `sell`, `swap`, `transfer_in`, `transfer_out`, `gas`,
+  `approval`, and `unknown` classifications;
+- FIFO lot matching with INR paise and token quantities stored as integers;
+- a missing-evidence workflow that reruns calculations after the user supplies
+  actual INR paid or received;
+- optional opening FIFO lots from a locally parsed CSV;
+- quarantine of isolated unsupported inbound token spam without discarding
+  valid supported movements;
+- precise complete, partial, blocked, no-disposal, and genuine-zero states;
+- a labelled static demo ledger; and
+- JSON evidence export, including quarantined and unsafe unsupported movements.
 
-Public wallet histories are difficult to understand because they contain raw
-contract calls, token transfers, gas payments, swaps, approvals, and incomplete
-context. Users must still determine:
+No login, wallet connection, seed phrase, or private key is required.
 
-- what each transaction represents;
-- which transactions may be taxable disposals;
-- how acquisition lots match later disposals;
-- which records have enough information for an INR estimate;
-- which records require manual review; and
-- how the result can be explained and independently verified.
-
-LedgerProof India turns that technical history into a reviewable ledger while
-keeping facts, model inferences, deterministic calculations, and unknowns
-visibly separate.
-
-## Core Objective
-
-Given a public Ethereum wallet address, the application should:
-
-1. fetch a defined range of on-chain transactions;
-2. normalize provider-specific data into one internal format;
-3. classify transactions as buys, sells, swaps, transfers, gas, approvals, or
-   unknown activity;
-4. reconcile supported acquisition and disposal lots using deterministic FIFO
-   logic;
-5. calculate a limited, source-dated Indian VDA tax preview;
-6. explain the result in plain English with confidence and evidence; and
-7. export a report that the user can inspect independently.
-
-## Workflow
+## Core workflow
 
 ```mermaid
 flowchart LR
-    A["Wallet Address"] --> B["Fetch"]
-    B --> C["Normalize"]
-    C --> D["Classify"]
-    D --> E["Reconcile"]
-    E --> F["Explain"]
-    F --> G["Export Report"]
-    G -. "Optional after core release" .-> H["Hash Report"]
-    H --> I["Base Sepolia Receipt"]
+    A["Public address + financial year"] --> B["Paginated GoldRush fetch"]
+    B --> C["Validate and normalize"]
+    C --> D["Deterministic classification"]
+    D --> E["FIFO reconciliation"]
+    E --> F{"Evidence complete?"}
+    F -- "No" --> G["Resolve missing evidence or import opening lots"]
+    G --> E
+    F -- "Yes or safely partial" --> H["Review and export JSON"]
 ```
 
-### 1. Address
+### Deterministic rule engine
 
-The user enters a public EVM wallet address. Reading public blockchain history
-does not require wallet connection, a private key, or a seed phrase.
+The application deliberately has no OpenAI dependency. The UI states:
 
-### 2. Fetch
+> DETERMINISTIC RULE ENGINE — tax calculations do not depend on AI.
 
-A server-side API route requests Ethereum transaction history from GoldRush by
-Covalent. Provider credentials remain on the server and are never exposed to
-the browser.
+Rules and user-validated evidence classify the transactions. TypeScript and
+`BigInt` own every quantity, cost-basis, gain, loss, and tax calculation. No
+provider or natural-language model can supply financial arithmetic.
 
-### 3. Normalize
+### Missing evidence
 
-Provider-specific records are converted into a stable internal transaction
-schema containing fields such as:
+Blockchain history does not prove actual INR purchase cost, INR sale proceeds,
+wallet ownership, or special gift/reward treatment. The results page shows only
+transactions needing evidence and allows the user to select:
 
-- transaction hash;
-- block timestamp;
-- asset and token contract;
-- raw integer amount and token decimals;
-- sender and recipient;
-- gas paid;
-- decoded method or event information; and
-- block-explorer URL.
+- Bought for INR;
+- Sold for INR;
+- Transfer between my wallets;
+- Gift / reward / airdrop; or
+- Unknown — keep excluded.
 
-### 4. Classify
+INR is requested only when the selected treatment requires it. Rupees are
+converted to integer paise and sent to `/api/analysis/report`; the deterministic
+engine then reruns FIFO and immediately replaces the report.
 
-Deterministic rules handle obvious records. A constrained LLM agent can help
-classify ambiguous activity and must return validated structured data:
+### Spam quarantine
 
-- category;
-- confidence;
-- short reason;
-- evidence transaction hashes; and
-- `needsReview`.
+Unsupported movements follow conservative rules:
 
-The model does not calculate prices, gains, or tax totals.
+- unsupported inbound token with no wallet outflow: quarantine as possible
+  spam;
+- unsupported token sent by the wallet: keep in review;
+- unsupported token received while a supported asset was sent: keep in review
+  because it may be swap consideration.
 
-### 5. Reconcile
+Token symbols are never trusted. Contract address, decimals, and standard must
+match the supported registry. Quarantined movements remain in the JSON evidence
+export.
 
-Pure TypeScript code performs the financial calculations. Supported
-acquisitions and disposals are matched using FIFO. Token base units and INR
-paise are stored as integers to avoid floating-point accounting errors.
+### Financial-year coverage
 
-### 6. Explain
+GoldRush pagination continues until enough earlier acquisition context is
+available, the provider history ends, or the 250-record demo cap is reached.
+The report explicitly displays `Complete history: Yes/No`. A cap or provider
+boundary never silently becomes a complete report.
 
-The results page presents four distinct information types:
+When full acquisition history is unavailable, the user may add an opening-lot
+CSV after loading the live wallet:
 
-- **Fact:** directly observed on-chain;
-- **Inference:** classification produced by rules or the LLM;
-- **Estimate:** deterministic result based on included prices and lots; and
-- **Needs review:** information that is missing or unsafe to assume.
+```csv
+asset,quantity,acquired_at,cost_basis_inr,transaction_hash
+ETH,0.25,2024-04-10,54000,0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+```
 
-### 7. Export
+The browser parses and validates the file locally. It does not upload or store
+the original CSV. Only structured, validated lots are submitted for the current
+calculation.
 
-The user can download a JSON report containing coverage, transaction evidence,
-classifications, matched lots, calculations, exclusions, and limitations.
+### Pricing boundaries
 
-### Optional Web3 Receipt
+- Historical CoinGecko INR prices are optional and used only for supported,
+  two-sided swaps.
+- Actual exchange/CSV INR evidence is required for buys and sells.
+- Market price is never substituted for the user’s actual purchase cost.
+- Unavailable pricing produces a blocked or partial state, never an invented
+  value.
 
-After the core application is production-ready, a user may hash the canonical
-report and submit only its `keccak256` fingerprint to a small contract on Base
-Sepolia. The receipt proves that a particular report version was submitted at a
-particular time. It does not prove that the tax calculation is legally correct.
+The simplified 30% preview is informed by
+[Income Tax Act Section 115BBH](https://www.incometaxindia.gov.in/w/section-115bbh-4),
+which addresses income from transfer, cost of acquisition, and loss set-off.
+LedgerProof labels FIFO as its accounting assumption; it does not claim that
+Section 115BBH mandates FIFO.
 
-No raw report, transaction history, PAN, name, or other personal information
-should be written on-chain.
+## Result states
 
-## MVP Scope
+The UI distinguishes:
 
-The first release intentionally supports:
+- `No supported disposals detected`;
+- `Calculation blocked: acquisition cost missing`;
+- `Calculation blocked: sale or swap valuation missing`;
+- `Partial calculation`;
+- `Complete calculation`; and
+- `₹0 calculated — complete`.
 
-- Ethereum mainnet wallet addresses;
-- a capped transaction range for reliable demo performance;
-- ETH, WETH, USDC, and USDT in the initial priced-asset registry;
-- `buy`, `sell`, `swap`, `transfer_in`, `transfer_out`, `gas`, `approval`, and
-  `unknown` classifications;
-- FIFO lot reconciliation;
-- historical INR valuation where a supported price is available;
-- visible exclusions and low-confidence records;
-- plain-English report generation;
-- JSON report export; and
-- a clearly labelled static demo ledger for reliable evaluation.
+This prevents “no sale occurred” from looking like an application failure.
+Positive VDA gains and VDA losses remain separate. The preview excludes
+surcharge and TDS credit; 4% cess is included only when explicitly selected by
+the request.
 
-The MVP does not attempt:
-
-- direct ITR filing;
-- tax payment or TDS-credit calculation;
-- PAN, KYC, or user-account management;
-- centralized-exchange account import;
-- every chain, token, bridge, NFT, or DeFi protocol;
-- automatic ownership detection across multiple wallets; or
-- individualized legal or tax conclusions.
-
-Historical market prices are applied only to a confirmed, two-sided supported
-asset swap. A one-sided wallet movement is not treated as proof of a purchase,
-sale, or cost basis. If a historical price, acquisition lot, or other required
-fact is unavailable, the UI says `Not calculated` instead of displaying a
-zero-value estimate.
-
-## Tax-Preview Rules
-
-The application should keep tax rules in a source-dated configuration and
-recheck official guidance before release.
-
-For the simplified preview:
-
-- positive priced VDA gains are shown separately;
-- VDA losses are displayed but are not silently netted against positive gains;
-- acquisition cost is tracked through matched lots;
-- gas is recorded but is not silently treated as a deductible expense;
-- a 30% base-tax estimate may be shown with a separately labelled illustrative
-  cess component; and
-- surcharge, residency, TDS credit, filing status, and unavailable off-chain
-  facts are excluded.
-
-## Technology Stack
+## Technology
 
 | Layer | Technology | Responsibility |
 | --- | --- | --- |
-| Web application | Next.js App Router + TypeScript | Public UI and server routes |
-| Styling | Tailwind CSS | Responsive interface |
-| Validation | Zod | Input, provider, and LLM schema validation |
-| On-chain data | GoldRush by Covalent | Ethereum wallet transaction history |
-| Historical prices | CoinGecko | Supported asset/date INR valuations |
-| Explanation agent | OpenAI API | Structured classification and explanation |
-| Accounting engine | TypeScript + `BigInt` | FIFO and deterministic calculations |
-| Unit tests | Vitest | Schema, normalization, classification, and ledger tests |
-| Browser tests | Playwright | Core user flow and error states |
+| Application | Next.js App Router + TypeScript | Public UI and server routes |
+| Validation | Zod | Requests, provider data, evidence, and report schemas |
+| On-chain data | GoldRush by Covalent | Ethereum transaction history |
+| Historical prices | CoinGecko | Optional supported swap/date INR evidence |
+| Accounting | TypeScript + `BigInt` | Rules, FIFO, and tax arithmetic |
+| Unit/API tests | Vitest | Schemas, providers, evidence, and reconciliation |
+| Browser tests | Playwright | Core user flow and failure states |
 | Deployment | Vercel | Public hackathon deployment |
-| Optional Web3 | Solidity + viem + Base Sepolia | Report-hash receipt |
 
-## Implemented Project Structure
+The optional Base Sepolia report receipt is not implemented. It remains blocked
+until every core release gate, including final video/deployment consistency,
+passes.
+
+## Project structure
 
 ```text
-src/app/
-  api/
-    analysis/
-      fetch/
-      report/
-  page.tsx
-src/components/
-src/lib/
-  goldrush.ts
-  coingecko.ts
-  transaction-agent.ts
-  reconciliation.ts
-  tax-report.ts
-  request-guard.ts
-docs/
-  codex-runs/
+src/
+  app/api/
+    analysis/fetch/
+    analysis/report/
+    health/
+  components/
+    address-analyzer.tsx
+    analysis-results.tsx
+    evidence-review.tsx
+  lib/
+    asset-registry.ts
+    coingecko.ts
+    financial-year.ts
+    goldrush.ts
+    opening-lot-csv.ts
+    reconciliation.ts
+    schemas.ts
+    tax-report.ts
 tests/
+  e2e/
   fixtures/
-.github/
-  workflows/
-    ci.yml
+docs/codex-runs/
 ```
 
-The optional smart-contract receipt is not part of the current core build.
+## Local development
 
-## Local Development
+Requirements:
 
-### Prerequisites
+- Node.js 20 or newer;
+- a GoldRush API key for live wallet history; and
+- an optional CoinGecko API key for supported historical swap prices.
 
-- Node.js 20 or newer
-- npm, pnpm, or another compatible package manager
-- GoldRush API credentials
-- OpenAI API credentials
-- optional CoinGecko API credentials
-- optional browser wallet and Base Sepolia test ETH for the receipt feature
-
-### Environment
-
-Create `.env.local` from `.env.example`:
-
-```bash
-cp .env.example .env.local
-```
-
-Expected server-side variables:
+Create `.env.local` from `.env.example` and set server-only variables:
 
 ```text
 GOLDRUSH_API_KEY=
-OPENAI_API_KEY=
-OPENAI_MODEL=
 COINGECKO_API_KEY=
 ```
 
-Do not prefix secrets with `NEXT_PUBLIC_`. Values using that prefix are exposed
-to browser code.
+Never add `NEXT_PUBLIC_` to provider secrets.
 
-### Install and Run
+Install and run:
 
 ```bash
 npm install
@@ -263,123 +209,77 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-### Public deployment
-
-- Application: [ledgerproof-india.vercel.app](https://ledgerproof-india.vercel.app/)
-- Health/configuration check:
-  [ledgerproof-india.vercel.app/api/health](https://ledgerproof-india.vercel.app/api/health)
-
-The health route returns only provider-configuration booleans and the selected
-model name. It never returns API-key values. A successful deployment still
-needs one manual analysis using a known active Ethereum address before
-submission.
-
-### Verification
+## Verification
 
 ```bash
 npm run lint
 npm run typecheck
 npm test
 npm run build
-npx playwright test
+npm run test:e2e
 ```
 
-These commands are the intended release checks. Update them if the implemented
-package scripts use different names.
+Required behavior includes:
 
-## Required Test Coverage
+- valid and invalid addresses;
+- live and static-demo flows;
+- empty history, provider rate limit, provider unavailability, and timeout;
+- financial-year boundaries, pagination, and the 250-record cap;
+- exact supported-token decimals and large integers;
+- spam quarantine without loss of supported movements;
+- unsafe unsupported outflows remaining in review;
+- evidence-driven INR buy/sale recalculation;
+- opening FIFO CSV validation;
+- FIFO matching, missing acquisition lots, and swap-price failure;
+- positive gain/VDA loss separation; and
+- JSON evidence export with no secrets.
 
-- valid and invalid EVM addresses;
-- malformed or incomplete provider responses;
-- token decimals and large integer amounts;
-- pagination and transaction limits;
-- every supported classification;
-- invalid LLM JSON and unsupported categories;
-- prompt-injection-shaped token metadata;
-- FIFO lot matching;
-- missing acquisition lots;
-- unavailable historical prices;
-- VDA loss separation;
-- gas treatment;
-- live, empty, loading, timeout, and upstream-error UI states; and
-- optional receipt hashing, duplicate prevention, wrong network, and wallet
-  rejection.
+## Security and privacy
 
-## Security and Privacy
+- Provider keys are server-only and are never returned by `/api/health`.
+- Public API bodies and per-instance request counts are bounded for a hackathon
+  deployment.
+- Raw wallet histories, provider secrets, and reports are not logged.
+- Token metadata is treated as untrusted input.
+- The application never requests a private key or seed phrase.
+- Missing financial evidence is excluded rather than guessed.
+- The original opening-lot CSV is not stored.
 
-- Never request or store a wallet seed phrase or private key.
-- Keep all provider and model credentials server-side.
-- Apply per-instance request budgets to public API routes and short-lived
-  server caches to reduce duplicate provider requests.
-- Treat transaction metadata and token strings as untrusted input.
-- Validate LLM output before using it.
-- Do not let the LLM perform financial arithmetic.
-- Avoid logging raw reports or sensitive user activity.
-- Store only the report hash in the optional smart contract.
-- Use Base Sepolia, not a mainnet, for the hackathon receipt.
+## Known limits
 
-## Known Data Limitations
+On-chain history may not reveal centralized-exchange trades, actual INR cost or
+proceeds, ownership of another wallet, special airdrop/gift facts, TDS
+certificates, residency, surcharge, or full DeFi/NFT context. GoldRush and
+CoinGecko may also be unavailable or rate-limited.
 
-On-chain history may not reveal:
+The in-memory request budget is per server instance, which is suitable for the
+hackathon demo but is not a distributed production rate limiter.
 
-- centralized-exchange trades;
-- the original INR acquisition value;
-- whether another wallet belongs to the same user;
-- whether a transfer is a sale, bridge, gift, or self-transfer;
-- complete airdrop, staking, NFT, or DeFi context;
-- residency, surcharge, filing status, or TDS certificates; or
-- transactions outside the selected date and pagination range.
+## Public links
 
-Records affected by these gaps must be marked `Needs review` and excluded from
-automatic totals when a safe calculation is not possible.
+- Application: [ledgerproof-india.vercel.app](https://ledgerproof-india.vercel.app/)
+- Health check:
+  [ledgerproof-india.vercel.app/api/health](https://ledgerproof-india.vercel.app/api/health)
+- Repository:
+  [Pratyush-kya/ledgerproof-india](https://github.com/Pratyush-kya/ledgerproof-india)
 
-## Demonstrating Genuine Codex Usage
+The health route reports provider-presence booleans and deterministic
+classification mode. It never validates provider billing/credits and never
+returns key values.
 
-The public commit history should show repeated agentic development cycles:
+## Release gate
 
-```text
-Plan -> Build -> Test -> Self-review -> Fix -> Verify -> Commit
-```
+- [x] Public no-login landing and static demo.
+- [x] Deterministic classification and arithmetic with no OpenAI dependency.
+- [x] Evidence-driven recalculation and clear incomplete states.
+- [x] No application secrets exposed.
+- [ ] Fresh production deployment of the current local changes.
+- [ ] Known active wallet reverified on that deployment.
+- [ ] Final demo video shows the same Git commit and deployed product.
 
-Each `docs/codex-runs/day-XX.md` file should record:
-
-- the day's objective;
-- the exact prompt supplied to Codex;
-- the accepted plan;
-- files changed;
-- commands and tests executed;
-- issues found during self-review;
-- fixes applied; and
-- the builder's own review decision.
-
-Do not manufacture transcripts or claim tests that were not executed.
-
-## Release Gate
-
-The optional Web3 receipt must remain blocked until all core checks pass:
-
-- [x] Public deployment is configured without application authentication.
-- [ ] A fresh wallet analysis completes.
-- [x] The labelled demo-ledger flow completes.
-- [x] Facts, inferences, estimates, and unknowns are visibly separated.
-- [x] LLM and deterministic fallback behavior are understandable.
-- [x] Lint, tests, production build, and browser tests pass locally.
-- [x] No API keys or wallet secrets are exposed.
-- [x] README claims match the implemented product.
-- [ ] Repository, deployment, and demo video show the same version.
-
-## Submission Deliverables
-
-- **Application:** [ledgerproof-india.vercel.app](https://ledgerproof-india.vercel.app/)
-- **Public repository:** [Pratyush-kya/ledgerproof-india](https://github.com/Pratyush-kya/ledgerproof-india)
-- **Three-minute demo:** Not recorded yet
-- **Project Description:** Not published yet
-- **Optional contract:** Not implemented; remains blocked behind the core
-  release gate
-
-Update each pending deliverable only after verifying that it is public and
-matches the submitted release.
+Do not start optional blockchain receipt work until all unchecked core gates
+pass.
 
 ## License
 
-MIT. See [`LICENSE`](./LICENSE).
+MIT. See [LICENSE](./LICENSE).

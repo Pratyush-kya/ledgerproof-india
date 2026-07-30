@@ -307,4 +307,200 @@ describe("deterministic reconciliation fixtures", () => {
     expect(result.disposals).toEqual([]);
     expect(result.gasTreatments).toHaveLength(1);
   });
+
+  it("quarantines unsupported inbound spam without losing a supported ETH purchase", () => {
+    const transaction = buildTransaction(
+      {
+        id: "eth-buy-with-spam",
+        day: 1,
+        deltas: [
+          {
+            asset: "ETH",
+            direction: "in",
+            amountAtomic: "1000000000000000000",
+          },
+          {
+            asset: "UNKNOWN",
+            assetId:
+              "eip155:1/erc20:0x1111111111111111111111111111111111111111",
+            symbol: "VITALIK",
+            decimals: 18,
+            standard: "erc20",
+            direction: "in",
+            amountAtomic: "999000000000000000000",
+          },
+        ],
+      },
+      0,
+    );
+
+    const result = reconcileTransactions({
+      transactions: [transaction],
+      evidence: [
+        {
+          txHash: transaction.txHash,
+          resolution: "bought_for_inr",
+          fiatFlow: {
+            direction: "paid",
+            amountInrPaisa: "100000",
+          },
+          assetValuations: [],
+        },
+      ],
+      historyComplete: true,
+    });
+
+    expect(result.classifications[0]).toMatchObject({
+      category: "buy",
+      needsReview: false,
+      source: "user",
+    });
+    expect(result.remainingLots[0]).toMatchObject({
+      symbol: "ETH",
+      costBasisInrPaisa: "100000",
+    });
+    expect(result.quarantinedAssets).toHaveLength(1);
+    expect(result.quarantinedAssets[0].symbol).toBe("VITALIK");
+    expect(result.unsupportedAssetsRequiringReview).toEqual([]);
+    expect(result.summary).toMatchObject({
+      supportedAssetMovements: 1,
+      quarantinedAssetMovements: 1,
+      needsUserEvidence: 0,
+    });
+  });
+
+  it("keeps unsupported consideration with a supported wallet outflow in review", () => {
+    const transaction = buildTransaction(
+      {
+        id: "unsafe-possible-swap",
+        day: 1,
+        deltas: [
+          {
+            asset: "ETH",
+            direction: "out",
+            amountAtomic: "100000000000000000",
+          },
+          {
+            asset: "UNKNOWN",
+            assetId:
+              "eip155:1/erc20:0x2222222222222222222222222222222222222222",
+            symbol: "MYST",
+            decimals: 18,
+            standard: "erc20",
+            direction: "in",
+            amountAtomic: "1",
+          },
+        ],
+      },
+      0,
+    );
+
+    const result = reconcileTransactions({
+      transactions: [transaction],
+      historyComplete: true,
+    });
+
+    expect(result.classifications[0]).toMatchObject({
+      category: "unknown",
+      needsReview: true,
+    });
+    expect(result.quarantinedAssets).toEqual([]);
+    expect(result.unsupportedAssetsRequiringReview).toHaveLength(1);
+    expect(result.disposals).toEqual([]);
+    expect(result.summary.calculationStatus).toBe("partial");
+  });
+
+  it("accepts a user decision to keep an outgoing movement excluded", () => {
+    const transaction = buildTransaction(
+      {
+        id: "user-excluded-outflow",
+        day: 1,
+        deltas: [
+          {
+            asset: "ETH",
+            direction: "out",
+            amountAtomic: "100000000000000000",
+          },
+        ],
+      },
+      0,
+    );
+
+    const result = reconcileTransactions({
+      transactions: [transaction],
+      evidence: [
+        {
+          txHash: transaction.txHash,
+          resolution: "unknown",
+          assetValuations: [],
+        },
+      ],
+      historyComplete: true,
+    });
+
+    expect(result.classifications[0]).toMatchObject({
+      category: "unknown",
+      needsReview: false,
+      source: "user",
+    });
+    expect(result.summary).toMatchObject({
+      needsUserEvidence: 0,
+      excludedTransactions: 1,
+      calculationStatus: "partial",
+    });
+  });
+
+  it("uses an opening FIFO lot and user sale evidence for exact tax arithmetic", () => {
+    const transaction = buildTransaction(
+      {
+        id: "sale-with-opening-lot",
+        day: 10,
+        deltas: [
+          {
+            asset: "ETH",
+            direction: "out",
+            amountAtomic: "1000000000000000000",
+          },
+        ],
+      },
+      0,
+    );
+
+    const result = reconcileTransactions({
+      transactions: [transaction],
+      evidence: [
+        {
+          txHash: transaction.txHash,
+          resolution: "sold_for_inr",
+          fiatFlow: {
+            direction: "received",
+            amountInrPaisa: "150000",
+          },
+          assetValuations: [],
+        },
+      ],
+      openingLots: [
+        {
+          lotId: "opening-eth",
+          ...SUPPORTED_ASSET_REGISTRY.ETH,
+          quantityAtomic: "1000000000000000000",
+          acquiredAt: "2025-04-01T00:00:00.000Z",
+          costBasisInrPaisa: "100000",
+          sourceTxHash: `0x${"f".repeat(64)}`,
+        },
+      ],
+      historyComplete: true,
+    });
+
+    expect(result.disposals[0]).toMatchObject({
+      proceedsInrPaisa: "150000",
+      costBasisInrPaisa: "100000",
+      taxableGainInrPaisa: "50000",
+      needsReview: false,
+    });
+    expect(result.summary).toMatchObject({
+      estimatedBaseTax30PercentInrPaisa: "15000",
+      calculationStatus: "complete",
+    });
+  });
 });

@@ -186,7 +186,9 @@ export async function buildHistoricalSwapEvidence(
     }
 
     const deltas = transaction.assetDeltas.filter(
-      (delta) => BigInt(delta.amountAtomic) > BigInt(0),
+      (delta) =>
+        BigInt(delta.amountAtomic) > BigInt(0) &&
+        inspectSupportedAsset(delta).supported,
     );
     const incoming = deltas.filter((delta) => delta.direction === "in");
     const outgoing = deltas.filter((delta) => delta.direction === "out");

@@ -18,7 +18,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-const MAX_REQUEST_BYTES = 512 * 1024;
+const MAX_REQUEST_BYTES = 2 * 1024 * 1024;
 
 function errorResponse(
   status: number,
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     !consumeRequestBudget({
       namespace: "analysis-report",
       clientKey: requestClientKey(request),
-      limit: 10,
+      limit: 30,
       windowMs: 60_000,
     })
   ) {
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     return errorResponse(
       400,
       "INVALID_REQUEST",
-      "Provide between 1 and 50 normalized Ethereum transactions.",
+      "Provide between 1 and 250 normalized Ethereum transactions with valid evidence.",
     );
   }
 

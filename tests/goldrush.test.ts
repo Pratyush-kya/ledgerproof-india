@@ -72,10 +72,10 @@ describe("GoldRush ingestion", () => {
     expect(result.transactions[0]?.txHash).toBe(`0x${"a".repeat(64)}`);
   });
 
-  it("caps an oversized provider page at 50 transactions", async () => {
+  it("caps an oversized provider page at 250 transactions", async () => {
     const baseItem = providerFixture.data.items[0];
     const oversizedFixture = structuredClone(providerFixture);
-    oversizedFixture.data.items = Array.from({ length: 55 }, (_, index) => ({
+    oversizedFixture.data.items = Array.from({ length: 255 }, (_, index) => ({
       ...baseItem,
       tx_hash: `0x${index.toString(16).padStart(64, "0")}`,
     }));
@@ -86,8 +86,9 @@ describe("GoldRush ingestion", () => {
       fetchImpl: async () => jsonResponse(oversizedFixture),
     });
 
-    expect(result.transactions).toHaveLength(50);
+    expect(result.transactions).toHaveLength(250);
     expect(result.truncated).toBe(true);
+    expect(result.historyComplete).toBe(false);
   });
 
   it("follows a validated GoldRush next-page link", async () => {

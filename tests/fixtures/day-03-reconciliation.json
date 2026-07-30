@@ -253,11 +253,11 @@
       "expected": {
         "categories": ["buy", "swap"],
         "categoryNeedsReview": [false, true],
-        "positiveTaxableGainsInrPaisa": "0",
+        "positiveTaxableGainsInrPaisa": "20000",
         "vdaLossesInrPaisa": "0",
-        "estimatedBaseTax30PercentInrPaisa": "0",
+        "estimatedBaseTax30PercentInrPaisa": "6000",
         "estimatedCess4PercentInrPaisa": null,
-        "estimatedTaxIncludingCessInrPaisa": "0",
+        "estimatedTaxIncludingCessInrPaisa": "6000",
         "excludedTransactions": 1,
         "remainingLot": {
           "symbol": "USDC",
@@ -266,9 +266,9 @@
         },
         "disposal": {
           "costBasisInrPaisa": "50000",
-          "taxableGainInrPaisa": null,
-          "vdaLossInrPaisa": null,
-          "needsReview": true
+          "taxableGainInrPaisa": "20000",
+          "vdaLossInrPaisa": "0",
+          "needsReview": false
         }
       }
     },
@@ -466,7 +466,7 @@
         "estimatedBaseTax30PercentInrPaisa": "0",
         "estimatedCess4PercentInrPaisa": null,
         "estimatedTaxIncludingCessInrPaisa": "0",
-        "excludedTransactions": 1
+        "excludedTransactions": 0
       }
     },
     {
@@ -494,7 +494,7 @@
         "estimatedBaseTax30PercentInrPaisa": "0",
         "estimatedCess4PercentInrPaisa": null,
         "estimatedTaxIncludingCessInrPaisa": "0",
-        "excludedTransactions": 1
+        "excludedTransactions": 0
       }
     }
   ]

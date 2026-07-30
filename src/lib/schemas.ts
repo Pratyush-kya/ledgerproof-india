@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const MAX_DEMO_TRANSACTIONS = 250;
+
 export const EvmAddressSchema = z
   .string()
   .regex(/^0x[a-fA-F0-9]{40}$/, "Enter a valid 0x Ethereum wallet address.");
@@ -19,6 +21,22 @@ const AtomicAmountSchema = z
   .string()
   .regex(/^\d+$/, "Amounts must be stored as non-negative atomic-unit strings.");
 
+const PositiveAtomicAmountSchema = AtomicAmountSchema.refine(
+  (value) => BigInt(value) > BigInt(0),
+  "Use a positive atomic-unit string.",
+);
+
+const TransactionHashSchema = z.string().regex(/^0x[a-fA-F0-9]{64}$/);
+
+export const FinancialYearSchema = z
+  .string()
+  .regex(/^20\d{2}-\d{2}$/, "Use an Indian financial year such as 2026-27.")
+  .refine((value) => {
+    const startYear = Number(value.slice(0, 4));
+    const endYear = Number(value.slice(5, 7));
+    return (startYear + 1) % 100 === endYear;
+  }, "The financial-year end must immediately follow its start.");
+
 export const AssetDeltaSchema = z.object({
   assetId: z.string().min(1),
   symbol: z.string().min(1).max(24),
@@ -30,7 +48,7 @@ export const AssetDeltaSchema = z.object({
 
 export const NormalizedTransactionSchema = z.object({
   id: z.string().min(1),
-  txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+  txHash: TransactionHashSchema,
   chainId: z.literal(1),
   blockNumber: z.number().int().nonnegative(),
   timestamp: z.string().datetime({ offset: true }),
@@ -47,6 +65,7 @@ export const NormalizedTransactionSchema = z.object({
 
 export const FetchTransactionsRequestSchema = z.object({
   address: EvmAddressSchema,
+  financialYear: FinancialYearSchema.optional(),
 });
 
 export const FetchTransactionsResultSchema = z.object({
@@ -54,9 +73,13 @@ export const FetchTransactionsResultSchema = z.object({
   chainId: z.literal(1),
   source: z.literal("goldrush"),
   fetchedAt: z.string().datetime({ offset: true }),
-  transactions: z.array(NormalizedTransactionSchema).max(50),
+  financialYear: FinancialYearSchema.nullable(),
+  transactions: z
+    .array(NormalizedTransactionSchema)
+    .max(MAX_DEMO_TRANSACTIONS),
   isEmpty: z.boolean(),
   truncated: z.boolean(),
+  historyComplete: z.boolean(),
 });
 
 export const FetchTransactionsSuccessSchema = z.object({
@@ -86,39 +109,120 @@ export const ClassificationSchema = z.strictObject({
   category: TransactionCategorySchema,
   confidence: z.number().min(0).max(1),
   reason: z.string().min(1).max(500),
-  evidenceTxHashes: z.array(z.string().regex(/^0x[a-fA-F0-9]{64}$/)).min(1),
+  evidenceTxHashes: z.array(TransactionHashSchema).min(1),
   needsReview: z.boolean(),
-  source: z.enum(["rule", "agent", "user"]),
+  source: z.enum(["rule", "user"]),
 });
 
-export const AgentExplanationSchema = z
-  .string()
-  .min(1)
-  .max(500)
-  .regex(
-    /^(?!.*(?:₹|\bINR\b|\bUSD\b|%|\btax\b|\bgain\b|\bloss\b|\bprice\b|\btotal\b|\bcost basis\b|\bproceeds\b|\d+\s*[+\-*/=]\s*\d+)).*$/i,
-    "Agent explanations must not contain financial calculations or tax conclusions.",
+export const EvidenceResolutionSchema = z.enum([
+  "bought_for_inr",
+  "sold_for_inr",
+  "self_transfer",
+  "gift_reward_airdrop",
+  "unknown",
+  "ignore_inbound_spam",
+]);
+
+export const FiatFlowSchema = z.strictObject({
+  direction: z.enum(["paid", "received"]),
+  amountInrPaisa: PositiveAtomicAmountSchema,
+});
+
+export const AssetValuationSchema = z.strictObject({
+  assetId: z.string().min(1),
+  direction: z.enum(["in", "out"]),
+  amountInrPaisa: PositiveAtomicAmountSchema,
+});
+
+export const TransactionEvidenceSchema = z
+  .strictObject({
+    txHash: TransactionHashSchema,
+    resolution: EvidenceResolutionSchema.optional(),
+    operationHint: z.enum(["approval", "gas"]).optional(),
+    fiatFlow: FiatFlowSchema.optional(),
+    carriedCostBasisInrPaisa: AtomicAmountSchema.optional(),
+    assetValuations: z.array(AssetValuationSchema).default([]),
+    gasValueInrPaisa: PositiveAtomicAmountSchema.optional(),
+  })
+  .superRefine((evidence, context) => {
+    const valuationKeys = new Set<string>();
+
+    for (const valuation of evidence.assetValuations) {
+      const key = `${valuation.assetId.toLowerCase()}:${valuation.direction}`;
+      if (valuationKeys.has(key)) {
+        context.addIssue({
+          code: "custom",
+          path: ["assetValuations"],
+          message: `Duplicate valuation for ${key}.`,
+        });
+      }
+      valuationKeys.add(key);
+    }
+
+    if (
+      evidence.resolution === "bought_for_inr" &&
+      evidence.fiatFlow?.direction !== "paid"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["fiatFlow"],
+        message: "A purchase requires an explicit INR-paid amount.",
+      });
+    }
+
+    if (
+      evidence.resolution === "sold_for_inr" &&
+      evidence.fiatFlow?.direction !== "received"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["fiatFlow"],
+        message: "A sale requires an explicit INR-received amount.",
+      });
+    }
+  });
+
+export const OpeningLotSchema = z.strictObject({
+  lotId: z.string().min(1).max(160),
+  assetId: z.string().min(1),
+  symbol: z.string().min(1).max(24),
+  decimals: z.number().int().min(0).max(255),
+  standard: z.enum(["native", "erc20"]),
+  quantityAtomic: PositiveAtomicAmountSchema,
+  acquiredAt: z.string().datetime({ offset: true }),
+  costBasisInrPaisa: AtomicAmountSchema,
+  sourceTxHash: TransactionHashSchema,
+});
+
+export const ExcludedAssetMovementSchema = z.strictObject({
+  transactionId: z.string().min(1),
+  txHash: TransactionHashSchema,
+  assetId: z.string().min(1),
+  symbol: z.string().min(1).max(24),
+  decimals: z.number().int().min(0).max(255),
+  amountAtomic: PositiveAtomicAmountSchema,
+  direction: z.enum(["in", "out"]),
+  reason: z.string().min(1),
+});
+
+export const CalculationStatusSchema = z.enum([
+  "no_supported_disposals",
+  "blocked_missing_basis",
+  "blocked_missing_valuation",
+  "partial",
+  "complete",
+  "complete_zero",
+]);
+
+export const CalculationPeriodSchema = z
+  .strictObject({
+    start: z.string().datetime({ offset: true }),
+    endExclusive: z.string().datetime({ offset: true }),
+  })
+  .refine(
+    (period) => Date.parse(period.start) < Date.parse(period.endExclusive),
+    "Calculation period start must be before its end.",
   );
-
-export const AgentClassificationOutputSchema = z.strictObject({
-  classifications: z
-    .array(
-      z.strictObject({
-        transactionId: z.string().regex(/^tx_\d+$/),
-        category: TransactionCategorySchema,
-        confidence: z.number().min(0).max(1),
-        reason: AgentExplanationSchema,
-        evidenceTxHashes: z
-          .array(z.string().regex(/^0x[a-fA-F0-9]{64}$/))
-          .min(1)
-          .max(10),
-        needsReview: z.boolean(),
-      }),
-    )
-    .max(50),
-});
-
-export const ClassificationModeSchema = z.enum(["agent", "rule_fallback"]);
 
 export const DeterministicSummarySchema = z.strictObject({
   positiveTaxableGainsInrPaisa: AtomicAmountSchema,
@@ -129,7 +233,13 @@ export const DeterministicSummarySchema = z.strictObject({
   estimatedTaxIncludingCessInrPaisa: AtomicAmountSchema,
   calculatedDisposals: z.number().int().nonnegative(),
   excludedTransactions: z.number().int().nonnegative(),
-  calculationStatus: z.enum(["complete", "partial"]),
+  supportedAssetMovements: z.number().int().nonnegative(),
+  needsUserEvidence: z.number().int().nonnegative(),
+  quarantinedAssetMovements: z.number().int().nonnegative(),
+  unsafeUnsupportedAssetMovements: z.number().int().nonnegative(),
+  historyComplete: z.boolean(),
+  calculationPeriod: CalculationPeriodSchema.nullable(),
+  calculationStatus: CalculationStatusSchema,
   excludesSurcharge: z.literal(true),
   excludesTdsCredit: z.literal(true),
 });
@@ -142,7 +252,7 @@ export const ReconciledLotSchema = z.strictObject({
   quantityAtomic: AtomicAmountSchema,
   acquiredAt: z.string().datetime({ offset: true }),
   costBasisInrPaisa: AtomicAmountSchema.nullable(),
-  sourceTxHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+  sourceTxHash: TransactionHashSchema,
   needsReview: z.boolean(),
 });
 
@@ -154,7 +264,7 @@ export const DisposalMatchSchema = z.strictObject({
 
 export const ReconciledDisposalSchema = z.strictObject({
   transactionId: z.string().min(1),
-  txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+  txHash: TransactionHashSchema,
   assetId: z.string().min(1),
   symbol: z.string().min(1).max(24),
   quantityAtomic: AtomicAmountSchema,
@@ -169,7 +279,7 @@ export const ReconciledDisposalSchema = z.strictObject({
 
 export const GasTreatmentSchema = z.strictObject({
   transactionId: z.string().min(1),
-  txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+  txHash: TransactionHashSchema,
   gasFeeWei: AtomicAmountSchema,
   valueInrPaisa: AtomicAmountSchema.nullable(),
   includedInCostBasis: z.literal(false),
@@ -187,24 +297,37 @@ export const PlainEnglishTaxReportSchema = z.strictObject({
 });
 
 export const AnalysisReportRequestSchema = z.strictObject({
-  transactions: z.array(NormalizedTransactionSchema).min(1).max(50),
-  evidence: z.array(z.unknown()).max(50).default([]),
+  transactions: z
+    .array(NormalizedTransactionSchema)
+    .min(1)
+    .max(MAX_DEMO_TRANSACTIONS),
+  evidence: z
+    .array(TransactionEvidenceSchema)
+    .max(MAX_DEMO_TRANSACTIONS)
+    .default([]),
+  openingLots: z.array(OpeningLotSchema).max(MAX_DEMO_TRANSACTIONS).default([]),
+  calculationPeriod: CalculationPeriodSchema.optional(),
+  historyComplete: z.boolean().default(false),
   includeCess: z.boolean().default(false),
 });
 
 export const AnalysisReportSuccessSchema = z.strictObject({
   data: z.strictObject({
-    classificationMode: ClassificationModeSchema,
+    classificationMode: z.literal("deterministic"),
     classificationNotice: z.string().min(1),
     classifications: z.array(ClassificationSchema),
     calculation: z.strictObject({
-      engineVersion: z.literal("0.1"),
+      engineVersion: z.literal("0.2"),
       method: z.literal("deterministic-rules-and-fifo"),
       summary: DeterministicSummarySchema,
       limitations: z.array(z.string().min(1)).min(1),
       remainingLots: z.array(ReconciledLotSchema),
       disposals: z.array(ReconciledDisposalSchema),
       gasTreatments: z.array(GasTreatmentSchema),
+      quarantinedAssets: z.array(ExcludedAssetMovementSchema),
+      unsupportedAssetsRequiringReview: z.array(
+        ExcludedAssetMovementSchema,
+      ),
     }),
     report: PlainEnglishTaxReportSchema,
   }),
@@ -252,9 +375,17 @@ export const TaxReportSchema = z.object({
 
 export type EvmAddress = z.infer<typeof EvmAddressSchema>;
 export type NormalizedTransaction = z.infer<typeof NormalizedTransactionSchema>;
-export type FetchTransactionsResult = z.infer<typeof FetchTransactionsResultSchema>;
+export type FetchTransactionsResult = z.infer<
+  typeof FetchTransactionsResultSchema
+>;
 export type Classification = z.infer<typeof ClassificationSchema>;
-export type ClassificationMode = z.infer<typeof ClassificationModeSchema>;
+export type TransactionEvidence = z.infer<typeof TransactionEvidenceSchema>;
+export type OpeningLot = z.infer<typeof OpeningLotSchema>;
+export type ExcludedAssetMovement = z.infer<
+  typeof ExcludedAssetMovementSchema
+>;
+export type CalculationStatus = z.infer<typeof CalculationStatusSchema>;
+export type CalculationPeriod = z.infer<typeof CalculationPeriodSchema>;
 export type AnalysisReportSuccess = z.infer<typeof AnalysisReportSuccessSchema>;
 export type TaxLot = z.infer<typeof TaxLotSchema>;
 export type ReconciledDisposal = z.infer<typeof ReconciledDisposalSchema>;

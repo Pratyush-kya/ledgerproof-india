@@ -5,15 +5,20 @@ import { z } from "zod";
 import {
   EvmAddressSchema,
   FetchTransactionsResultSchema,
+  FinancialYearSchema,
+  MAX_DEMO_TRANSACTIONS,
   NormalizedTransactionSchema,
   type FetchTransactionsResult,
   type NormalizedTransaction,
 } from "@/lib/schemas";
+import {
+  financialYearBounds,
+  isInFinancialYear,
+} from "@/lib/financial-year";
 
 const GOLDRUSH_ORIGIN = "https://api.covalenthq.com";
 const CHAIN_NAME = "eth-mainnet";
 const ETH_ASSET_ID = "eip155:1/slip44:60";
-const PAGE_LIMIT = 50;
 const MAX_PROVIDER_PAGES = 10;
 const DEFAULT_TIMEOUT_MS = 12_000;
 
@@ -361,15 +366,23 @@ export function normalizeGoldRushTransaction(
 export async function fetchGoldRushTransactions({
   address,
   apiKey,
+  financialYear,
   fetchImpl = fetch,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 }: {
   address: string;
   apiKey: string;
+  financialYear?: string;
   fetchImpl?: FetchImplementation;
   timeoutMs?: number;
 }): Promise<FetchTransactionsResult> {
   const validAddress = EvmAddressSchema.parse(address);
+  const selectedFinancialYear = financialYear
+    ? FinancialYearSchema.parse(financialYear)
+    : null;
+  const periodEnd = selectedFinancialYear
+    ? Date.parse(financialYearBounds(selectedFinancialYear).endExclusive)
+    : null;
   const trimmedApiKey = apiKey.trim();
 
   if (!trimmedApiKey) {
@@ -382,10 +395,11 @@ export async function fetchGoldRushTransactions({
   let nextUrl: URL | null = buildInitialUrl(validAddress);
   let pagesFetched = 0;
   let truncated = false;
+  let selectedPeriodTransactions = 0;
 
   while (
     nextUrl &&
-    transactions.length < PAGE_LIMIT &&
+    transactions.length < MAX_DEMO_TRANSACTIONS &&
     pagesFetched < MAX_PROVIDER_PAGES
   ) {
     let response: Response;
@@ -435,22 +449,36 @@ export async function fetchGoldRushTransactions({
         continue;
       }
 
-      if (transactions.length === PAGE_LIMIT) {
+      if (transactions.length === MAX_DEMO_TRANSACTIONS) {
         truncated = true;
         break;
       }
 
       seenHashes.add(providerTransaction.tx_hash);
 
-      transactions.push(
-        normalizeGoldRushTransaction(
-          providerTransaction,
-          validAddress,
-        ),
+      const normalized = normalizeGoldRushTransaction(
+        providerTransaction,
+        validAddress,
       );
+
+      if (
+        periodEnd !== null &&
+        Date.parse(normalized.timestamp) >= periodEnd
+      ) {
+        continue;
+      }
+
+      if (
+        selectedFinancialYear &&
+        isInFinancialYear(normalized.timestamp, selectedFinancialYear)
+      ) {
+        selectedPeriodTransactions += 1;
+      }
+
+      transactions.push(normalized);
     }
 
-    if (transactions.length === PAGE_LIMIT) {
+    if (transactions.length === MAX_DEMO_TRANSACTIONS) {
       truncated = truncated || Boolean(page.links.next);
       break;
     }
@@ -469,8 +497,12 @@ export async function fetchGoldRushTransactions({
     chainId: 1,
     source: "goldrush",
     fetchedAt: new Date().toISOString(),
+    financialYear: selectedFinancialYear,
     transactions,
-    isEmpty: transactions.length === 0,
+    isEmpty: selectedFinancialYear
+      ? selectedPeriodTransactions === 0
+      : transactions.length === 0,
     truncated,
+    historyComplete: !truncated && !nextUrl,
   });
 }

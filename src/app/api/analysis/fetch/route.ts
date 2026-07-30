@@ -90,8 +90,8 @@ export async function POST(request: Request) {
       400,
       isAddressFailure ? "INVALID_ADDRESS" : "INVALID_REQUEST",
       isAddressFailure
-        ? "Enter a valid 0x Ethereum wallet address."
-        : "Request body must contain an Ethereum address.",
+        ? "Enter a valid Ethereum address and financial year."
+        : "Request body must contain an Ethereum address and optional financial year.",
       false,
     );
   }
@@ -107,7 +107,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const cacheKey = `goldrush:${requestResult.data.address.toLowerCase()}`;
+    const cacheKey =
+      `goldrush:${requestResult.data.address.toLowerCase()}:` +
+      `${requestResult.data.financialYear ?? "all"}`;
     const cached = getCachedResponse<z.infer<typeof FetchTransactionsSuccessSchema>>(
       cacheKey,
     );
@@ -121,6 +123,7 @@ export async function POST(request: Request) {
     const data = await fetchGoldRushTransactions({
       address: requestResult.data.address,
       apiKey,
+      financialYear: requestResult.data.financialYear,
     });
     const payload = FetchTransactionsSuccessSchema.parse({ data });
     setCachedResponse(cacheKey, payload, 60_000);
