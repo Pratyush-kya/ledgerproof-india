@@ -126,7 +126,7 @@ describe("GoldRush ingestion", () => {
     expect(result.transactions[0]?.decodedEventNames).toEqual([]);
   });
 
-  it("caps an oversized provider page at 250 transactions", async () => {
+  it("caps an oversized provider page at 100 transactions", async () => {
     const baseItem = providerFixture.data.items[0];
     const oversizedItems = Array.from({ length: 255 }, (_, index) => ({
       ...baseItem,
@@ -145,7 +145,7 @@ describe("GoldRush ingestion", () => {
         ),
     });
 
-    expect(result.transactions).toHaveLength(250);
+    expect(result.transactions).toHaveLength(100);
     expect(result.truncated).toBe(true);
     expect(result.historyComplete).toBe(false);
   });
