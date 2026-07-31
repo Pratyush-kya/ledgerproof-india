@@ -25,7 +25,7 @@ import {
 );
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_TOTAL_TIMEOUT_MS = 40_000;
-const MIN_PAGE_BUDGET_MS = 4_000;
+const MIN_PAGE_BUDGET_MS = 1_000;
 
 const AtomicAmountSchema = z.string().regex(/^\d+$/);
 const TransactionHashSchema = z.string().regex(/^0x[a-fA-F0-9]{64}$/);
