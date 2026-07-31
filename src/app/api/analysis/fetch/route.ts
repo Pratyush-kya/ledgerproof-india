@@ -26,6 +26,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 const MAX_REQUEST_BYTES = 4 * 1024;
 
 function errorResponse(
@@ -90,8 +91,8 @@ export async function POST(request: Request) {
       400,
       isAddressFailure ? "INVALID_ADDRESS" : "INVALID_REQUEST",
       isAddressFailure
-        ? "Enter a valid Ethereum address and financial year."
-        : "Request body must contain an Ethereum address and optional financial year.",
+        ? "Enter a valid 0x Ethereum wallet address."
+        : "Request body must contain an Ethereum address.",
       false,
     );
   }
@@ -107,9 +108,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const cacheKey =
-      `goldrush:${requestResult.data.address.toLowerCase()}:` +
-      `${requestResult.data.financialYear ?? "all"}`;
+    const cacheKey = `goldrush:${requestResult.data.address.toLowerCase()}`;
     const cached = getCachedResponse<z.infer<typeof FetchTransactionsSuccessSchema>>(
       cacheKey,
     );
@@ -123,7 +122,6 @@ export async function POST(request: Request) {
     const data = await fetchGoldRushTransactions({
       address: requestResult.data.address,
       apiKey,
-      financialYear: requestResult.data.financialYear,
     });
     const payload = FetchTransactionsSuccessSchema.parse({ data });
     setCachedResponse(cacheKey, payload, 60_000);
@@ -149,10 +147,6 @@ export async function POST(request: Request) {
       );
     }
     if (error instanceof GoldRushUnavailableError) {
-      console.warn("[analysis/fetch] blockchain provider unavailable", {
-        reason: error.reason,
-        status: error.status,
-      });
       return errorResponse(
         502,
         "UPSTREAM_UNAVAILABLE",

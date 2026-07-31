@@ -23,8 +23,8 @@ const PROVIDER_PAGE_SIZE = 50;
 const MAX_PROVIDER_PAGES = Math.ceil(
   MAX_DEMO_TRANSACTIONS / PROVIDER_PAGE_SIZE,
 );
-const DEFAULT_TIMEOUT_MS = 12_000;
-const DEFAULT_TOTAL_TIMEOUT_MS = 35_000;
+const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_TOTAL_TIMEOUT_MS = 60_000;
 const MIN_PAGE_BUDGET_MS = 1_000;
 
 const AtomicAmountSchema = z.string().regex(/^\d+$/);
