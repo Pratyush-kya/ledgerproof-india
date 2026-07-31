@@ -1,6 +1,6 @@
  import { z } from "zod";
 
-    export const MAX_DEMO_TRANSACTIONS = 100;
+    export const MAX_DEMO_TRANSACTIONS = 250;
 
     export const EvmAddressSchema = z
       .string()

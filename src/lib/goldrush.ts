@@ -19,7 +19,7 @@ import {
  const GOLDRUSH_ORIGIN = "https://api.covalenthq.com";
     const CHAIN_NAME = "eth-mainnet";
     const ETH_ASSET_ID = "eip155:1/slip44:60";
-    const PROVIDER_PAGE_SIZE = 100;
+    const PROVIDER_PAGE_SIZE = 50;
     const MAX_PROVIDER_PAGES = Math.ceil(
       MAX_DEMO_TRANSACTIONS / PROVIDER_PAGE_SIZE,
 );
