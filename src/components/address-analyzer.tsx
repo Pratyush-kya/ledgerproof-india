@@ -40,7 +40,7 @@ type FlowState =
     }
   | { status: "success"; message: string };
 
-const REQUEST_TIMEOUT_MS = 45_000;
+const REQUEST_TIMEOUT_MS = 50_000;
 const demoAddress = DEMO_LEDGER.coverage.address;
 const financialYears = recentFinancialYears(6);
 
