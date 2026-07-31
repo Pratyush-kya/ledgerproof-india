@@ -1,9 +1,9 @@
-import { z } from "zod";
+ import { z } from "zod";
 
-export const MAX_DEMO_TRANSACTIONS = 100;
+    export const MAX_DEMO_TRANSACTIONS = 100;
 
-export const EvmAddressSchema = z
-  .string()
+    export const EvmAddressSchema = z
+      .string()
   .regex(/^0x[a-fA-F0-9]{40}$/, "Enter a valid 0x Ethereum wallet address.");
 
 export const TransactionCategorySchema = z.enum([

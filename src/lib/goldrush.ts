@@ -16,12 +16,12 @@ import {
   isInFinancialYear,
 } from "@/lib/financial-year";
 
-const GOLDRUSH_ORIGIN = "https://api.covalenthq.com";
-const CHAIN_NAME = "eth-mainnet";
-const ETH_ASSET_ID = "eip155:1/slip44:60";
-const PROVIDER_PAGE_SIZE = 100;
-const MAX_PROVIDER_PAGES = Math.ceil(
-  MAX_DEMO_TRANSACTIONS / PROVIDER_PAGE_SIZE,
+ const GOLDRUSH_ORIGIN = "https://api.covalenthq.com";
+    const CHAIN_NAME = "eth-mainnet";
+    const ETH_ASSET_ID = "eip155:1/slip44:60";
+    const PROVIDER_PAGE_SIZE = 100;
+    const MAX_PROVIDER_PAGES = Math.ceil(
+      MAX_DEMO_TRANSACTIONS / PROVIDER_PAGE_SIZE,
 );
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_TOTAL_TIMEOUT_MS = 60_000;
